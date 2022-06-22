@@ -12,7 +12,7 @@ const fastify = Fastify({
 const start = async () => {
   fastify.register(fastifyPrismaClient)
   fastify.register(botPlugin)
-
+  
   try {
     await fastify.listen(config.PORT)
   } catch (err) {

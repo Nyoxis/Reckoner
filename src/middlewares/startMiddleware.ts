@@ -4,20 +4,12 @@ import type { Chat } from '@prisma/client'
 
 const startMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   try {
-    let replyMessage = ''
+    let replyMessages: String[] = []
     let config = ctx.message.text.slice(7)
-
-    if (ctx.chat.type === 'private') {
-      if (config === 'private') replyMessage += 'only public mode in privat chat \n'
-      if (config === '' || config === 'private') config = 'public'
-    } else {
-      const admins = await ctx.getChatAdministrators()
-      if (!admins.find(admin => admin.user.id === ctx.message.from.id)) {
-        throw new TelegramError({
-          description: 'Only admin can initialize this bot',
-          error_code: 401
-        })
-      }
+    
+    if (ctx.chat.type === 'private' && config === 'private') {
+      replyMessages.push('only public mode in privat chat')
+      config = 'public'
     }
     
     let chat: Chat
@@ -26,11 +18,18 @@ const startMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text'
         const thisChat = await ctx.getChat()
         
         if (thisChat.type !== 'private') {
+          const admins = await ctx.getChatAdministrators()
+          if (!admins.find(admin => admin.user.id === ctx.message.from.id)) {
+            throw 'Only admin can initialize this bot in private mode'
+          }
+          
           await ctx.telegram.sendMessage(
             ctx.message.from.id,
             `hello you have started this bot in group ${thisChat.title}`
           ).catch((err: TelegramError) => {
-            throw err
+            if (err.response.error_code === 403) {
+              throw 'bot is blocked by sender'
+            } else throw err
           })
         }
         
@@ -40,8 +39,8 @@ const startMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text'
           create: { id: ctx.chat.id, config: 'PRIVATE' }
         })
         chat?.config === 'PRIVATE'
-          ? replyMessage += `yes it is private`
-          : replyMessage += 'some error occured'
+          ? replyMessages.push(`yes it is private`) 
+          : replyMessages.push('some error occured')
         ctx.telegram.deleteMyCommands({
           scope: {
             type: 'chat',
@@ -49,7 +48,7 @@ const startMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text'
           }
         })
         break
-        
+      
       case 'public':
       case '':
         chat = await ctx.prisma.chat.upsert({
@@ -58,34 +57,20 @@ const startMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text'
           create: { id: ctx.chat.id, config: 'PUBLIC' }
         })
         chat?.config === 'PUBLIC'
-          ? replyMessage += 'now public'
-          : replyMessage += 'some error occured'
+          ? replyMessages.push('now public')
+          : replyMessages.push('some error occured')
         break
-        
+      
       default:
-        replyMessage += 'unknow config'
+        replyMessages.push('unknow config')
     }
     
-    ctx.reply(replyMessage, { reply_to_message_id: ctx.message?.message_id })
+    ctx.reply(replyMessages.join('\n'), { reply_to_message_id: ctx.message?.message_id })
     
   } catch (err) {
-    const tErr = err as TelegramError
-    
-    switch (tErr.response.error_code) {
-      case 401:
-        ctx.reply(
-          tErr.response.description,
-          { reply_to_message_id: ctx.message?.message_id }
-        )
-        break
-      case 403:
-        ctx.reply(
-          'bot is blocked by sender',
-          { reply_to_message_id: ctx.message?.message_id }
-        )
-        break
-      default: throw tErr
-    }
+    if (typeof err === 'string') {
+      ctx.reply(err, { reply_to_message_id: ctx.message.message_id })
+    } else throw err
   }
 }
 

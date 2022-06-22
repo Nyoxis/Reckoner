@@ -6,6 +6,10 @@ import checkMiddleware from './middlewares/checkMiddleware'
 import startMiddleware from './middlewares/startMiddleware'
 import includeMiddleware from './middlewares/includeMiddleware'
 import billMIddleware from './middlewares/billMiddleware'
+import payMiddleware from './middlewares/payMiddleware'
+import orderMiddleware from './middlewares/orderMiddleware'
+import buyMiddleware from './middlewares/buyMiddleware'
+import sendMiddleware from './middlewares/sendMiddleware'
 
 import type { FastifyPluginAsync } from 'fastify'
 import type { PrismaClient } from '@prisma/client'
@@ -29,6 +33,10 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   bot.start(startMiddleware)
   bot.command('include', includeMiddleware)
   bot.command('bill', billMIddleware)
+  bot.command('pay', payMiddleware)
+  bot.command('order', orderMiddleware)
+  bot.command('buy', buyMiddleware)
+  bot.command('send', sendMiddleware)
   bot.on('text', (ctx) => ctx.message.text === '/💦' ? ctx.reply(ctx.message.text, { reply_to_message_id: ctx.message.message_id }) : undefined)
   bot.help(async (ctx) => {
     const chat = await fastify.prisma.chat.findUnique({ where: { id: ctx.chat.id } })
