@@ -1,9 +1,11 @@
-import { TelegramError } from 'telegraf'
+import { errorHandling } from '../constants/functions'
+
+import type { TelegramError } from 'telegraf'
 import type { Middleware, NarrowedContext, Context, Types } from 'telegraf'
 import type { Chat } from '@prisma/client'
 
 const startMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
-  try {
+  errorHandling(ctx, async () => {
     let replyMessages: String[] = []
     let config = ctx.message.text.slice(7)
     
@@ -66,12 +68,7 @@ const startMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text'
     }
     
     ctx.reply(replyMessages.join('\n'), { reply_to_message_id: ctx.message?.message_id })
-    
-  } catch (err) {
-    if (typeof err === 'string') {
-      ctx.reply(err, { reply_to_message_id: ctx.message.message_id })
-    } else throw err
-  }
+  })
 }
 
 export default startMiddleware

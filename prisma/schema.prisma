@@ -32,23 +32,29 @@ model Member {
 }
 
 model RecordOfRecipient {
-  member Member @relation(fields: [chatId, account], references: [chatId, account], onDelete: SetNull)
+  member Member @relation(fields: [chatId, account], references: [chatId, account], onDelete: Cascade)
   chatId BigInt // relation scalar field (used in the `@relation` attribute above)
   account String
-  Record Record @relation(fields: [recordId], references: [id], onDelete: Cascade)
-  recordId BigInt // relation scalar field (used in the `@relation` attribute above)
+  record Record @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  recordId BigInt
+  // relation scalar field (used in the `@relation` attribute above)
   
   @@id([chatId, account, recordId])
 }
 
 model Record {
   id BigInt @id @unique @default(autoincrement())
+  message_id BigInt
+  reply_id BigInt?
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   chatId BigInt
   donor Member? @relation(fields: [chatId, donorAccount], references: [chatId, account], onDelete: SetNull)
   donorAccount String?
   recipients RecordOfRecipient[]
   amount Int @default(0)
+  active Boolean @default(true)
+
+  @@unique([message_id, chatId])
 }
 
 model Chat {
