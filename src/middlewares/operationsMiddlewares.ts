@@ -1,16 +1,12 @@
-import mexp from 'math-expression-evaluator'
+import config from '../config'
+import { errorHandling, listMembers, evaluate, replaceMentions, resolveQuery } from '../constants/functions'
+import { numericSymbolicFilter } from '../constants'
 
-import { errorHandling } from '../constants/functions'
-
-import type { Middleware, NarrowedContext, Context, Types } from 'telegraf'
+import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { Member, Record } from '@prisma/client'
-import type { MemberWithUsername } from '../constants/accountKind'
+import type { MemberWithUsername, SpecificContext } from '../constants/types'
 
-type SpecificContext = Pick<NarrowedContext<Context, Types.MountMap['text']>, 'chat' | 'prisma' | 'telegram'> & {
-  message: Pick<NarrowedContext<Context, Types.MountMap['text']>['message'], 'message_id' | 'text' | 'from'>
-}
-
-const getSimpleMember = (member: MemberWithUsername | undefined) => member ? { account: member.account, chatId: member.chatId } : undefined
+const getSimpleMember = (member: MemberWithUsername | undefined) => member ? { account: member.account, chatId: member.chatId, active: member.active } : undefined
 
 const getExecuteTransaction = (
   ctx: NarrowedContext<Context, Types.MountMap['text']>,
@@ -46,18 +42,20 @@ const getExecuteTransaction = (
       }
     })
     
-    const donorArg = donor ? { connect: { chatId_account: donor } } : {}
+    const donorArg = donor ? { connect: { chatId_account: { chatId: donor.chatId, account: donor.account } } } : {}
     const data = {
       chat: {
         connect: { id: ctx.chat.id }
       },
       message_id: ctx.message.message_id,
       donor: donorArg,
+      hasDonor: !!donorArg,
       recipients: {
         createMany: {
-          data: recipients
+          data: recipients.map(recipient => ({ chatId: recipient.chatId, account: recipient.account }))
         }
       },
+      recipientsQuantity: recipients.length,
       amount: Math.trunc(amount),
       active: true,
     }
@@ -112,61 +110,47 @@ const transactionCommand = async (
   execute: transactionCallback,
   isSubjective: boolean = true,
 ) => {
-  const parameters = ctx.message.text.split(' ').slice(1)
+  let parameters: string[]
+  if (ctx.message.text.startsWith('/')) {
+    parameters = [''].concat(ctx.message.text.split(' ').slice(1))
+  } else {
+    parameters = ctx.message.text.split(' ').splice(0, 1).concat(ctx.message.text.split(' ').slice(2))
+  }
+
   /*if (!parameters.length) {
     ctx.reply('a list of users', { reply_to_message_id: ctx.message.message_id })
   }*/
-  
-  let members: MemberWithUsername[] = ctx.prisma.computeKind(
-    await ctx.prisma.member.findMany({
-      where: {
-        chatId: ctx.chat.id
-      }
-    })
-  )
-  const promises = members.map(async (member) => {
-    if (member.kind === 'USER') {
-      const chatMember = await ctx.telegram.getChatMember(ctx.chat.id, Number.parseInt(member.account))
-      return {...member, username: chatMember.user.username ? chatMember.user.username : chatMember.user.first_name}
-    } else return member
-  })
-  members = await Promise.all(promises)
+  parameters = replaceMentions(ctx.message, parameters)
+  const members = await listMembers(ctx, true)
   
   return async () => {
-    let numeric: number
     let donor: MemberWithUsername | undefined
-    let addresseeNames: string[]
-    //first parameter is numberic
-    if (/^[0-9()+\-*/.]+$/.test(parameters[0])) {
-      numeric = Number.parseFloat(mexp.eval(parameters[0]))
-      addresseeNames = parameters.slice(1)
+    if (!parameters[0]) {
       if (isSubjective) {
         donor = members.find(member => member.account === ctx.message.from.id.toString())
-        if (!donor) throw 'you are not included'
+        if (!donor) throw 'Вы не являетесь участником'
       } else donor = undefined
-    } else if (/^[0-9()+\-*/.]+$/.test(parameters[1])) {
-      if (!isSubjective) throw 'operation does not require principal'
-      numeric = Number.parseFloat(mexp.eval(parameters[1]))
-      addresseeNames = parameters.slice(2)
-      donor = members.find(member => (member.kind === 'USER')
-          ? member.username === parameters[0].slice(1)
-          : member.account === parameters[0]
-      )
-      if (!donor) throw 'cannot find principal'
-    } else throw 'could not resolve invoice'
+    } else {
+      if (!isSubjective) throw 'Операция не требует принципала'
+      donor = resolveQuery(members, [parameters[0]])[0]
+      if (!donor) throw 'Принципал не найден'
+    }
+    parameters = parameters.slice(1)
+    //only numbers, operands and closed brackets
     
+    let numeric: number | undefined
+    let addresseeNames: string[] = []
+    for (const parameter of parameters) {
+      if (numericSymbolicFilter.test(parameter)) {
+        numeric = evaluate(parameter)
+        break
+      }
+      addresseeNames.push(parameter)
+    }
+    if (!numeric) throw 'Сумма отсутствует или использует недоступные символы'
     const sum = Math.trunc(numeric * 100)
     
-    const missing = addresseeNames.filter(addressee => !members.some(member => member.kind === 'USER'
-        ? member.username === addressee.slice(1)
-        : member.account === addressee
-    ))
-    if (missing.length) throw `member${missing.length>1 ? 's' : ''} ${missing.join(', ')} not found`
-    
-    const addressees = members.filter(member => (member.kind === 'USER')
-        ? addresseeNames.some(addressee => (addressee.slice(1) === member.username))
-        : addresseeNames.some(addressee => addressee === member.account)
-    )
+    const addressees = resolveQuery(members, addresseeNames)
     
     const { recipients, amount } = await getTransactionRequisites(members, donor, addressees, sum)
     const simpleDonor: Member | undefined = getSimpleMember(donor)
@@ -181,11 +165,11 @@ const buyRequisites: requisitesCallback = (members, donor, addressees, sum) => {
   if (!addressees.length) {
     recipients = members.filter(member => member !== donor)
   } else recipients = addressees
-  if (recipients.some(addressee => addressee === donor)) throw 'the principal must not be the addressee'
+  if (recipients.some(addressee => addressee === donor)) throw 'Принипал не может быть адресатом'
   const amount = sum*(1-1/(recipients.length+1))
   return { recipients, amount }
 }
-const buyMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
+const buyMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, await transactionCommand(ctx, buyRequisites, getExecuteTransaction(ctx)))
 }
 
@@ -196,24 +180,24 @@ const orderRequisites: requisitesCallback = (members, donor, addressees, sum) =>
   } else recipients = addressees
   return { recipients, amount: sum }
 }
-const orderMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
+const orderMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, await transactionCommand(ctx, orderRequisites, getExecuteTransaction(ctx), false))
 }
 
 const payRequisites: requisitesCallback = (members, donor, addressees, sum) => {
-  if (addressees.length) throw 'operation does not require addressees'
+  if (addressees.length) throw 'Операция не требует адресатов'
   const recipients: MemberWithUsername[] = []
   return { recipients, amount: sum }
 }
-const payMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
+const payMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, await transactionCommand(ctx, payRequisites, getExecuteTransaction(ctx)))
 }
 
 const giveRequisites: requisitesCallback = (members, donor, addressees, sum) => {
-  if (!addressees.length) throw 'member name is expected'
+  if (!addressees.length) throw 'Необходим адресат'
   return { recipients: addressees, amount: sum }
 }
-const giveMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
+const giveMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, await transactionCommand(ctx, giveRequisites, getExecuteTransaction(ctx)))
 }
 

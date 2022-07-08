@@ -1,4 +1,4 @@
-import type { Middleware, NarrowedContext, Context, Types } from 'telegraf'
+import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import {
   buyRequisites,
   orderRequisites,
@@ -68,7 +68,7 @@ const editedErrorHandling = async (
   }
 }
 
-const updateMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['edited_message']>> = async (update, next) => {
+const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['edited_message']>> = async (update, next) => {
   if (!('text' in update.editedMessage)) return next()
   
   const id = update.editedMessage.message_id

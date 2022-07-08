@@ -1,13 +1,13 @@
 import { errorHandling } from '../constants/functions'
 
 import type { TelegramError } from 'telegraf'
-import type { Middleware, NarrowedContext, Context, Types } from 'telegraf'
+import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { Chat } from '@prisma/client'
 
-const startMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
+const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, async () => {
     let replyMessages: String[] = []
-    let config = ctx.message.text.slice(7)
+    let config = ctx.message.text.split(' ')[1]
     
     if (ctx.chat.type === 'private' && config === 'private') {
       replyMessages.push('only public mode in privat chat')
@@ -53,6 +53,7 @@ const startMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text'
       
       case 'public':
       case '':
+      case undefined:
         chat = await ctx.prisma.chat.upsert({
           where: { id: ctx.chat.id },
           update: { config: 'PUBLIC' },

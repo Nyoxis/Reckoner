@@ -1,12 +1,24 @@
 import fp from 'fastify-plugin'
-import { Telegraf } from 'telegraf'
+import { Telegraf, Markup } from 'telegraf'
 
 import config from './config'
 import checkMiddleware from './middlewares/checkMiddleware'
 import startMiddleware from './middlewares/startMiddleware'
-import includeMiddleware from './middlewares/includeMiddleware'
-import billMIddleware from './middlewares/billMiddleware'
-import updateMiddleware from './middlewares/updateMiddleware'
+import {
+  default as manageMiddleware,
+  memberActions,
+} from './middlewares/manageMiddlewares'
+import {
+  includeMiddleware,
+  excludeMiddleware,
+  freezeMiddleware,
+  unfreezeMiddleware,
+} from './middlewares/includeMiddlewares'
+import {
+  default as billMIddleware,
+  composeCommand,
+  rectifyCommand,
+} from './middlewares/billMiddleware'
 import { 
   buyMiddleware,
   orderMiddleware,
@@ -17,11 +29,13 @@ import {
   undoMiddleware,
   redoMiddleware,
 } from './middlewares/historyMiddlewares'
+import updateMiddleware from './middlewares/updateMiddleware'
 
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
-import type { Update } from 'telegraf/typings/core/types/typegram'
 import type { PrismaClient } from '@prisma/client'
 import type { ComputeKind } from './constants/accountKind'
+import type { Update } from 'telegraf/typings/core/types/typegram'
+import { sneakyAddId } from './constants/functions'
 
 declare module 'telegraf' {
   interface Context {
@@ -37,11 +51,28 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   })
   
   bot.on('text', checkMiddleware)
+  bot.on('callback_query', (ctx, next) => {
+    sneakyAddId(ctx, ctx.callbackQuery.from)
+    next()
+  })
+  bot.on('inline_query', (ctx, next) => {
+    sneakyAddId(ctx, ctx.inlineQuery.from)
+    next()
+  })
   
   bot.start(startMiddleware)
+  bot.command('manage', manageMiddleware)
+  bot.on('callback_query', memberActions)
+  
   bot.command('include', includeMiddleware)
+  bot.command('exclude', excludeMiddleware)
+  bot.command('freeze', freezeMiddleware)
+  bot.command('unfreeze', unfreezeMiddleware)
+  
   bot.command('bill', billMIddleware)
-
+  bot.on('callback_query', composeCommand)
+  bot.on('inline_query', rectifyCommand)
+  
   bot.command('pay', payMiddleware)
   bot.command('order', orderMiddleware)
   bot.command('buy', buyMiddleware)
@@ -50,26 +81,40 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   bot.command('undo', undoMiddleware)
   bot.command('redo', redoMiddleware)
   
-  bot.help(async (ctx) => {
-    const chat = await fastify.prisma.chat.findUnique({ where: { id: ctx.chat.id } })
-    const members = await fastify.prisma.member.findMany({ where: { chatId: ctx.chat.id }})
-    ctx.reply(JSON.stringify(members))
-    ctx.reply(chat ? chat.config : 'not started', { reply_to_message_id: ctx.message.message_id })
-    //ctx.telegram.sendMessage(ctx.message.from.id, 'hello')
+  bot.on('text', (ctx, next) => {
+    const text = ctx.message.text
+    const words = text.split(' ')
+    if (!(words.length > 1 && words[1].startsWith('/'))) return next()
+
+    const command = words[1]
+    switch(command) {
+      case '/pay':
+        payMiddleware(ctx, next)
+        break
+      case '/order':
+        orderMiddleware(ctx, next)
+        break
+      case '/buy':
+        buyMiddleware(ctx, next)
+        break
+      case '/give':
+        giveMiddleware(ctx, next)
+        break
+      default: return next()
+    }
+    next()
   })
-  
   bot.command('stop', async (ctx) => {
     const deleted = await fastify.prisma.chat.deleteMany({ where: { id: ctx.chat.id } })
     ctx.reply(JSON.stringify(deleted), { reply_to_message_id: ctx.message.message_id })
   })
-  bot.on('text', (ctx) => ctx.message.text === '/💦' ? ctx.reply(ctx.message.text, { reply_to_message_id: ctx.message.message_id }) : undefined)
-  
+  /*
   const SECRET_PATH = `/telegraf/${bot.secretPathComponent()}`
   fastify.post(SECRET_PATH, (request: FastifyRequest<{ Body: Update }>, reply) => bot.handleUpdate(request.body, reply.raw))
   bot.telegram.setWebhook(config.WEBHOOK_URL + SECRET_PATH)
     .then(() => {
       console.log('Webhook is set on', config.WEBHOOK_URL)
-    })
+    })*/
   bot.on('edited_message', updateMiddleware)
   bot.launch()
   // Enable graceful stop

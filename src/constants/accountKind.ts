@@ -1,25 +1,36 @@
 import { Member, PrismaClient } from '@prisma/client'
 
-export type MemberWithKind = Member & { kind: 'USER' | 'GHOST' }
-export type MemberWithUsername = MemberWithKind & { username?: string }
+export class MemberWithKind implements Member {
+  chatId: bigint
+  account: string
+  active: boolean
+  
+  constructor (member: Member) {
+    this.account = member.account
+    this.chatId = member.chatId
+    this.active = member.active
+  }
+  
+  getKind = (): 'USER' | 'GHOST' => {
+    return /^[0-9]+$/.test(this.account) ? 'USER' : 'GHOST'
+  }
+}
+
 type MemberOrMembers<T extends Member | Member[]> = T extends Member ? MemberWithKind : MemberWithKind[]
 export interface ComputeKind {
-  computeKind<T extends Member | Member[]>(arg0: T): MemberOrMembers<T>
-  computeKind(arg0: Member | Member[]): MemberWithKind | MemberWithKind[]
+  withKind<T extends Member | Member[]>(arg0: T): MemberOrMembers<T>
+  withKind(arg0: Member | Member[]): MemberWithKind | MemberWithKind[]
 }
 
 function withComputeKind(prisma: PrismaClient): PrismaClient & ComputeKind {
   const computeKind: ComputeKind = {
-    computeKind(
+    withKind(
       member: Member | MemberWithKind
     ) {
-      const getKind = (element: Member): MemberWithKind => ({
-        ...element,
-        kind: /^[0-9]+$/.test(element.account) ? 'USER' : 'GHOST',
-      })
+      const withKind = (element: Member): MemberWithKind => new MemberWithKind(element)
       if (Array.isArray(member)) {
-        return member.map(getKind)
-      } else return getKind(member)
+        return member.map(withKind)
+      } else return withKind(member)
     },
   }
   return Object.assign(prisma, computeKind)

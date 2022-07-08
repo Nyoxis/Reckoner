@@ -26,6 +26,7 @@ model Member {
   account String
   donorIn Record[]
   recipientIn RecordOfRecipient[]
+  active Boolean @default(true)
   
   @@id([chatId, account])
   @@unique([chatId, account])
@@ -48,9 +49,12 @@ model Record {
   reply_id BigInt?
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   chatId BigInt
-  donor Member? @relation(fields: [chatId, donorAccount], references: [chatId, account], onDelete: SetNull)
+  donor Member? @relation(fields: [donorChat, donorAccount], references: [chatId, account], onDelete: SetNull)
+  donorChat BigInt?
   donorAccount String?
+  hasDonor Boolean
   recipients RecordOfRecipient[]
+  recipientsQuantity Int
   amount Int @default(0)
   active Boolean @default(true)
 

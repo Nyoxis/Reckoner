@@ -9,6 +9,7 @@ dotenv.config()
 
 interface ENV {
   PORT: number | undefined
+  BOT_NAME: string | undefined
   BOT_TOKEN: string | undefined
   WEBHOOK_URL: string | undefined
 }
@@ -24,6 +25,7 @@ type Config = NonNullableKey<ENV>
 const getConfig = (): ENV => {
   return {
     PORT: process.env.PORT ? Number(process.env.PORT) : undefined,
+    BOT_NAME: process.env.BOT_NAME ? String(process.env.BOT_NAME) : undefined,
     BOT_TOKEN: process.env.BOT_TOKEN ? String(process.env.BOT_TOKEN) : undefined,
     WEBHOOK_URL: process.env.WEBHOOK_URL ? String(process.env.WEBHOOK_URL) : undefined,
   }

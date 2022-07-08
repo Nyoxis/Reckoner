@@ -1,8 +1,8 @@
 import { errorHandling } from '../constants/functions'
 
-import type { Middleware, NarrowedContext, Context, Types } from 'telegraf'
+import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 
-const undoMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
+const undoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, async () => {
     const latestRecord = await ctx.prisma.record.findFirst({
       select: {
@@ -31,7 +31,7 @@ const undoMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']
   })
 }
 
-const redoMiddleware: Middleware<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
+const redoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, async () => {
     const latestRecord = await ctx.prisma.record.findFirst({
       select: {
