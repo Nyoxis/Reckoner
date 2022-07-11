@@ -28,8 +28,8 @@ export class MemberWithLink implements MemberWithUsername {
   }
 }
 
-export type SpecificContext = Pick<NarrowedContext<Context, Types.MountMap['text']>, 'chat' | 'prisma' | 'telegram'> & {
+export type SpecificContext = Pick<NarrowedContext<Context, Types.MountMap['text']>, 'chat' | 'prisma' | 'cache' | 'telegram'> & {
   message: Pick<NarrowedContext<Context, Types.MountMap['text']>['message'], 'message_id' | 'text' | 'from' | 'entities'>
 }
 
-export type PrismaChatContext = Pick<NarrowedContext<Context, Types.MountMap['callback_query']>, 'chat' | 'prisma' | 'telegram'>
+export type PrismaChatContext = Pick<NarrowedContext<Context, Types.MountMap['callback_query']>, 'chat' | 'prisma' | 'cache' | 'telegram'>

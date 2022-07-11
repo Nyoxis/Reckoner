@@ -87,6 +87,7 @@ const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['ed
     message: update.editedMessage,
     chat: update.chat,
     prisma: update.prisma,
+    cache: update.cache,
     telegram: update.telegram,
   }
   

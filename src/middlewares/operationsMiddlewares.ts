@@ -1,12 +1,10 @@
 import config from '../config'
-import { errorHandling, listMembers, evaluate, replaceMentions, resolveQuery } from '../constants/functions'
+import { errorHandling, getSimpleMember, listMembers, evaluate, replaceMentions, resolveQuery } from '../constants/functions'
 import { numericSymbolicFilter } from '../constants'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { Member, Record } from '@prisma/client'
 import type { MemberWithUsername, SpecificContext } from '../constants/types'
-
-const getSimpleMember = (member: MemberWithUsername | undefined) => member ? { account: member.account, chatId: member.chatId, active: member.active } : undefined
 
 const getExecuteTransaction = (
   ctx: NarrowedContext<Context, Types.MountMap['text']>,
@@ -49,7 +47,7 @@ const getExecuteTransaction = (
       },
       message_id: ctx.message.message_id,
       donor: donorArg,
-      hasDonor: !!donorArg,
+      hasDonor: !!donor,
       recipients: {
         createMany: {
           data: recipients.map(recipient => ({ chatId: recipient.chatId, account: recipient.account }))
@@ -89,14 +87,7 @@ type requisitesCallback = (
   members: MemberWithUsername[],
   donor: MemberWithUsername | undefined,
   addressees: MemberWithUsername[],
-  sum: number,
-) => {
-  recipients: MemberWithUsername[],
-  amount: number,
-} | Promise<{
-  recipients: MemberWithUsername[],
-  amount: number,
-}>
+) => MemberWithUsername[] | Promise<MemberWithUsername[]>
 
 type transactionCallback = (
   donor: Member | undefined,
@@ -152,50 +143,51 @@ const transactionCommand = async (
     
     const addressees = resolveQuery(members, addresseeNames)
     
-    const { recipients, amount } = await getTransactionRequisites(members, donor, addressees, sum)
+    const recipients = await getTransactionRequisites(members, donor, addressees)
     const simpleDonor: Member | undefined = getSimpleMember(donor)
     const isDefined = (member: Member | undefined): member is Member => !!member
     const simpleRecipients: Member[] = recipients.map(getSimpleMember).filter(isDefined)
-    execute(simpleDonor, simpleRecipients, amount)
+    execute(simpleDonor, simpleRecipients, sum)
   }
 }
 
-const buyRequisites: requisitesCallback = (members, donor, addressees, sum) => {
+const buyRequisites: requisitesCallback = (members, donor, addressees) => {
   let recipients
   if (!addressees.length) {
     recipients = members.filter(member => member !== donor)
   } else recipients = addressees
   if (recipients.some(addressee => addressee === donor)) throw 'Принипал не может быть адресатом'
-  const amount = sum*(1-1/(recipients.length+1))
-  return { recipients, amount }
+  if (donor) recipients.push(donor)
+  return recipients
 }
 const buyMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, await transactionCommand(ctx, buyRequisites, getExecuteTransaction(ctx)))
 }
 
-const orderRequisites: requisitesCallback = (members, donor, addressees, sum) => {
+const orderRequisites: requisitesCallback = (members, donor, addressees) => {
   let recipients
   if (!addressees.length) {
     recipients = members.filter(member => member !== donor)
   } else recipients = addressees
-  return { recipients, amount: sum }
+  return recipients
 }
 const orderMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, await transactionCommand(ctx, orderRequisites, getExecuteTransaction(ctx), false))
 }
 
-const payRequisites: requisitesCallback = (members, donor, addressees, sum) => {
+const payRequisites: requisitesCallback = (members, donor, addressees) => {
   if (addressees.length) throw 'Операция не требует адресатов'
   const recipients: MemberWithUsername[] = []
-  return { recipients, amount: sum }
+  return recipients
 }
 const payMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, await transactionCommand(ctx, payRequisites, getExecuteTransaction(ctx)))
 }
 
-const giveRequisites: requisitesCallback = (members, donor, addressees, sum) => {
+const giveRequisites: requisitesCallback = (members, donor, addressees) => {
   if (!addressees.length) throw 'Необходим адресат'
-  return { recipients: addressees, amount: sum }
+  if (addressees.some(addressee => addressee === donor)) throw 'Принципал не может быть адресатом'
+  return addressees
 }
 const giveMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, await transactionCommand(ctx, giveRequisites, getExecuteTransaction(ctx)))

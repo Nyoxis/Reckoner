@@ -54,6 +54,7 @@ const includeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['t
       return await withLink(ctx, member)
     })
     const includedList = await Promise.all(includedListPromises)
+    ctx.cache.del(ctx.chat.id)
     
     const m = includedList.length > 1
     reply = includedList.length ? reply + `Добавлен${m ? 'ы' : ''} участник${m ? 'и' : ''} *${includedList.map(member => member.linkName()).join(', ')}*` : reply + 'Никто не добавлен'
@@ -80,7 +81,8 @@ const manageMembers: manageFnType = async (ctx, onCompleteWord, onActive, member
     const removal = resolveQuery(members, names)
     const removedPromise = removal.map(memberUpdate)
     const removed = await Promise.all(removedPromise)
-  
+    ctx.cache.del(ctx.chat.id)
+    
     if (removal.length !== removed.length) throw new Error('error while deleting member')
     const m = removal.length > 1
     const text = `Участник${m ? 'и' : ''} ${removal.map(member => member.linkName()).join(', ')} ${onCompleteWord}${m ? 'ы' : ''}`

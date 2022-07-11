@@ -10,77 +10,162 @@ import type {
 import { listMembers, evaluate } from '../constants/functions'
 import { numericSymbolicFilter } from '../constants'
 
+const findTransactions = async (ctx: PrismaChatContext, member: MemberWithLink | undefined) => {
+  const whereDonor = member ? {
+    chatId: member.chatId,
+    donorAccount: member.account,
+    active: true,
+  } : {
+    chatId: ctx.chat?.id,
+    hasDonor: false,
+    active: true,
+  }
+  const donorInPromise = ctx.prisma.record.findMany({
+    select: {
+      amount: true,
+      recipients: {
+        select: {
+          member: {
+            select: {
+              account: true,
+              active: true,
+            }
+          }
+        }
+      },
+      recipientsQuantity: true,
+    },
+    where: whereDonor,
+  })
+
+  const whereRecipients = member ? {
+      chatId: member.chatId,
+      recipients: { some: { account: member.account} },
+      active: true,
+    } : {
+      chatId: ctx.chat?.id,
+      recipientsQuantity: 0,
+      active: true,
+    }
+  const recipientInPromise = await ctx.prisma.record.findMany({
+    select: {
+      amount: true,
+      recipients: {
+        select: {
+          member: {
+            select: {
+              account: true,
+              active: true,
+            }
+          }
+        }
+      },
+      recipientsQuantity: true,
+      donor: { select: {
+        account: true,
+        active: true,
+      }},
+      hasDonor: true,
+    },
+    where: whereRecipients,
+  })
+  return await Promise.all([donorInPromise, recipientInPromise])
+}
+
 const getBill = async (ctx: PrismaChatContext) => {
   const membersWithName = await listMembers(ctx, undefined)
   
   const promisesWithSum = membersWithName.map(async (member) => {
-    const donorInPromise = ctx.prisma.record.findMany({
-      select: {
-        amount: true,
-        recipients: {
-          select: {
-            member: {
-              select: { active: true }
-            }
-          }
-        },
-        recipientsQuantity: true,
-      },
-      where: {
-        chatId: member.chatId,
-        donorAccount: member.account,
-        active: true,
-      }
-    })
-    const recepientInPromise = ctx.prisma.record.findMany({
-      select: {
-        amount: true,
-        recipients: {
-          select: {
-            member: {
-              select: {
-                active: true
-              }
-            }
-          }
-        },
-        recipientsQuantity: true,
-        donor: { select: { active: true }},
-        hasDonor: true,
-      },
-      where: {
-        chatId: member.chatId,
-        recipients: { some: { account: member.account } },
-        active: true,
-      }
-    })
-    const [donorIn, recepientIn]  = await Promise.all([donorInPromise, recepientInPromise])
+    const [donorIn, recipientIn] = await findTransactions(ctx, member)
     
     const unfrozenTransactions = donorIn.map((record) => {
       if (record.recipientsQuantity) {
-        const sum = record.amount * (1 + 1/record.recipientsQuantity)
+        const part = record.amount / record.recipientsQuantity * record.recipients.length
         const frozenRecipients = record.recipients.filter(recipient => !recipient.member.active).length
-        const participants = 1 + record.recipientsQuantity - frozenRecipients
-        return participants ? sum * (1 - 1 / participants) : record.amount
+        const participants = record.recipients.length - frozenRecipients
+        const unfrozen = participants ? part / participants * (record.recipients.length - frozenRecipients) : record.amount
+        const deletedDebt = record.amount / record.recipientsQuantity * (record.recipientsQuantity - record.recipients.length)
+        return unfrozen + deletedDebt
       } else return record.amount
-    }).concat(recepientIn.map((record) => {
-      if (!record.hasDonor || record.donor?.active) {
-        const sum = record.amount * (1 + Number(record.hasDonor)/record.recipientsQuantity)
+    }).concat(recipientIn.map((record) => {
+      if (!record.hasDonor || record.donor?.active && record.recipientsQuantity) {
+        const part = record.amount / record.recipientsQuantity * record.recipients.length
         const frozenRecipients = record.recipients.filter(recipient => !recipient.member.active).length
-        const participants = Number(record.hasDonor) + record.recipientsQuantity - frozenRecipients
-        return participants ? -sum * (1 / participants) : 0
+        const participants = record.recipients.length - frozenRecipients
+        const unfrozen = participants ? part / participants : 0
+        return -unfrozen
       } else return 0
     }))
     const unfrozenSum =  Math.trunc(unfrozenTransactions.reduce((sum, transaction) => sum + transaction, 0)/100)
     
     const transactions = donorIn.map(record => record.amount)
-      .concat(recepientIn.map(record => -record.amount/record.recipientsQuantity))
+      .concat(recipientIn.map(record => -record.amount/record.recipientsQuantity))
     const totalSum =  Math.trunc(transactions.reduce((sum, transaction) => sum + transaction, 0)/100)
     
     return { ...member, unfrozenSum, totalSum }
   })
   
   return Promise.all(promisesWithSum)
+}
+
+const getDonorsDebtors = async (ctx: PrismaChatContext, principal: MemberWithLink) => {
+  let members = await getBill(ctx)
+  const principalWithSum = members.find(member => member.account === principal.account)
+  if (!principalWithSum) throw new Error('principal not a member')
+  const [ principalDebt, principalPart ] = [ principalWithSum.totalSum, principalWithSum.unfrozenSum ]
+  
+  const [donorIn, recipientIn] = await findTransactions(ctx, principal)
+  const [withoutDonor, withoutRecipients] = await findTransactions(ctx, undefined)
+
+  members = members.filter(member => member.account !== principal.account)
+  const membersWithDebit = members.map((member) => {
+    let memberOrders: number = 0
+    let totalOrders: number = 0
+    let totalPays: number = 0
+    withoutDonor.forEach((transaction) => {
+      if (transaction.recipients.some(recipient => recipient.member.account === member.account)) {
+        memberOrders = memberOrders + transaction.amount/transaction.recipientsQuantity
+      }
+      totalOrders = totalOrders + transaction.amount
+    })
+    withoutRecipients.forEach((transaction) => {
+      if (transaction.donor?.account === member.account) {
+        memberOrders = memberOrders - transaction.amount
+      }
+      totalPays = totalPays + transaction.amount
+    })
+    const payability = Math.min(totalPays / totalOrders, 1)
+
+    let principalOrders: number = 0
+    let debit: number = 0
+    recipientIn.forEach((transaction) => {
+      if (!transaction.hasDonor) {
+        return principalOrders = principalOrders + transaction.amount/transaction.recipientsQuantity
+      }
+      if (transaction.donor?.account !== member.account) return
+      return debit = debit + transaction.amount/transaction.recipientsQuantity
+    })
+    donorIn.forEach((transaction) => {
+      if (!transaction.recipientsQuantity) {
+        return principalOrders = principalOrders - transaction.amount
+      }
+      if (!transaction.recipients.some(recipient => recipient.member.account === member.account)) return
+      return debit = debit - transaction.amount/transaction.recipientsQuantity
+    })
+    
+    console.log(`${member.name} ${principalOrders} ${memberOrders} ${payability}`)
+    let orderDebit: number = 0
+    if (memberOrders < 0 && principalOrders > 0) {
+      orderDebit = Math.min(payability * -memberOrders, principalOrders)
+    }
+    if (memberOrders > 0 && principalOrders < 0) {
+      orderDebit = Math.min(memberOrders, payability * -principalOrders)
+    }
+    debit = debit - orderDebit
+    return { ...member, debit: Math.trunc(debit/100)}
+  })
+  const donorsDebtors = membersWithDebit.filter(member => member.debit)
+  return { principalDebt, principalPart, donorsDebtors }
 }
 
 const listKeyboard = async (ctx: PrismaChatContext) => {
@@ -92,7 +177,7 @@ const listKeyboard = async (ctx: PrismaChatContext) => {
   const memberButtons: InlineKeyboardButton[][] = activeMembers.map((member) => {
     
     const data = ['op', member.account].join(';')
-     return [Markup.button.callback(`${member.displayName()} ${member.unfrozenSum} ${member.totalSum - member.unfrozenSum}`, data)]
+     return [Markup.button.callback(`${member.displayName()} ${member.totalSum} ${member.unfrozenSum !== member.totalSum ? member.unfrozenSum : ''}`, data)]
   })
   memberButtons.push([Markup.button.callback('/order - заказ на счет или по депозиту', ['ad', '', '/order'].join(';'))])
   memberButtons.push([Markup.button.callback('править список', 'mg')])
@@ -132,7 +217,8 @@ const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['call
     case 'op':
       const opDonor = ctx.callbackQuery.data.split(';')[1]
       const opDonorMember = members.find(member => member.account === opDonor)
-      const opDonorLink = opDonorMember ? opDonorMember.linkName() : ''
+      if (!opDonorMember) throw new Error('donor for operaiton is not a member')
+      const opDonorLink = opDonorMember.linkName()
       
       const opButtons = [
         [Markup.button.callback('назад', 'bl')],
@@ -140,7 +226,27 @@ const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['call
         [Markup.button.callback('/give - одалживание или возврат долга', ['ad', opDonor, '/give'].join(';'))],
         [Markup.button.switchToCurrentChat('/pay - оплата счета, внос депозита', [opDonorLink, '/pay'].join(' ') + ' ')],
       ]
-      text = `Выберите команду от лица *${opDonorLink}*`
+
+      const { principalDebt, principalPart, donorsDebtors } = await getDonorsDebtors(ctx, opDonorMember)
+      text = `Дебет/долг участника *${opDonorLink}*: *${principalDebt.toString().replace('-', '\\-')}*\n`
+      if (principalPart !== principalDebt) {
+        text += `Дебет/долг без учета замороженных: *${principalPart.toString().replace('-', '\\-')}*\n`
+      }
+      
+      const debts = donorsDebtors.filter(donorDebtor => donorDebtor.debit > 0)
+        .map(donor => `  *${donor.linkName()}* *${donor.debit.toString().replace('-', '')}*`)
+      if (debts.length) {
+        text += 'Должен следующим участникам:\n'
+        text += debts.join('\n') + '\n'
+      }
+      const debits = donorsDebtors.filter(donorDebtor => donorDebtor.debit < 0)
+        .map(debtor => `  *${debtor.linkName()}* *${debtor.debit.toString().replace('-', '')}*`)
+      if (debits.length) {
+        text += 'Должны следующие участники:\n'
+        text += debits.join('\n') + '\n'
+      }
+      
+      text += `\nВыберите команду от лица *${opDonorLink}*`
       markup = Markup.inlineKeyboard(opButtons)
       break
       
@@ -148,7 +254,7 @@ const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['call
       const adDonor = ctx.callbackQuery.data.split(';')[1]
       const adDonorMember = members.find(member => member.account === adDonor)
       const adDonorLink = adDonorMember ? adDonorMember.linkName() : ''
-
+      
       const [operation, ...addressees] = ctx.callbackQuery.data.split(';').slice(2)
       const addresseeMembers = addressees
         .map(chosen => members.find(member => member.account === chosen))

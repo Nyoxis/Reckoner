@@ -3,6 +3,7 @@ import { Telegraf, Markup } from 'telegraf'
 
 import config from './config'
 import checkMiddleware from './middlewares/checkMiddleware'
+import { sneakyAddId } from './constants/functions'
 import startMiddleware from './middlewares/startMiddleware'
 import {
   default as manageMiddleware,
@@ -35,11 +36,12 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import type { PrismaClient } from '@prisma/client'
 import type { ComputeKind } from './constants/accountKind'
 import type { Update } from 'telegraf/typings/core/types/typegram'
-import { sneakyAddId } from './constants/functions'
+import type NodeCache from 'node-cache'
 
 declare module 'telegraf' {
   interface Context {
     prisma: PrismaClient & ComputeKind
+    cache: NodeCache
   }
 }
 
@@ -47,6 +49,7 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   const bot = new Telegraf(config.BOT_TOKEN)
   bot.use(async (ctx, next) => {
     ctx.prisma = fastify.prisma
+    ctx.cache = fastify.cache
     next()
   })
   
@@ -106,6 +109,7 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   })
   bot.command('stop', async (ctx) => {
     const deleted = await fastify.prisma.chat.deleteMany({ where: { id: ctx.chat.id } })
+    ctx.cache.del(ctx.chat.id)
     ctx.reply(JSON.stringify(deleted), { reply_to_message_id: ctx.message.message_id })
   })
   /*

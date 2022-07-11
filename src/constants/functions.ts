@@ -3,10 +3,10 @@ import { MemberWithLink } from './types'
 
 import type { NarrowedContext, Context, Types } from 'telegraf'
 import type { Message, User } from 'telegraf/typings/core/types/typegram'
-import type { PrismaChatContext } from './types'
+import type { PrismaChatContext, MemberWithUsername } from './types'
 import type { MemberWithKind } from './accountKind'
 
-const errorHandling = async (
+export const errorHandling = async (
   ctx: NarrowedContext<Context, Types.MountMap['text']>,
   callback: () => void | Promise<void>,
 ) => {
@@ -24,7 +24,7 @@ type WithLink = {
   <T extends MemberWithKind | MemberWithKind[]>(arg0: PrismaChatContext, arg1: T): Promise<MemberOrMembers<T>>
   (arg0: PrismaChatContext, arg1: MemberWithKind | MemberWithKind[]): Promise<MemberWithLink | MemberWithLink[]>
 }
-const withLink: WithLink = async ( ctx: PrismaChatContext, members: MemberWithKind | MemberWithKind[] ) => {
+export const withLink: WithLink = async ( ctx: PrismaChatContext, members: MemberWithKind | MemberWithKind[] ) => {
   const getLink = async (member: MemberWithKind): Promise<MemberWithLink> => {
     let name: string = ''
     let username: string | undefined = undefined
@@ -48,18 +48,27 @@ const withLink: WithLink = async ( ctx: PrismaChatContext, members: MemberWithKi
   } else return await getLink(members)
 }
 
-const listMembers = async (ctx: PrismaChatContext, active?: boolean): Promise<MemberWithLink[]> => {
+export const getSimpleMember = (member: MemberWithUsername | undefined) => {
+  return member ? { account: member.account, chatId: member.chatId, active: member.active } : undefined
+}
+
+export const listMembers = async (ctx: PrismaChatContext, active?: boolean): Promise<MemberWithLink[]> => {
   if (!ctx.chat) return []
+  const cachedMembers: MemberWithLink[] | undefined = ctx.cache.get(ctx.chat.id)
+  if (cachedMembers) return cachedMembers
+  
   const members = ctx.prisma.withKind(
     await ctx.prisma.member.findMany({
       where: { chatId: ctx.chat.id, active }
     })
   )
+  const membersWithLink = await withLink(ctx, members)
+  ctx.cache.set(ctx.chat.id, membersWithLink)
   
-  return await withLink(ctx, members)
+  return membersWithLink
 }
 
-const resolveQuery = (members: MemberWithLink[], queryMembers: string[]) => {
+export const resolveQuery = (members: MemberWithLink[], queryMembers: string[]) => {
   const missing = queryMembers.filter(query => {
     return !members.some(member => (member.getKind() === 'USER' && member.username)
       ? member.username === query.slice(1)
@@ -81,7 +90,7 @@ const resolveQuery = (members: MemberWithLink[], queryMembers: string[]) => {
   return foundMembers
 }
 
-const evaluate = (s: string) => {
+export const evaluate = (s: string) => {
   try {
     return Number.parseFloat(mexp.eval(s))
   } catch (e) {
@@ -90,7 +99,7 @@ const evaluate = (s: string) => {
   }
 }
 
-const replaceMentions = (message: Pick<Message.TextMessage, 'entities' | 'text'>, parameters: string[]) => {
+export const replaceMentions = (message: Pick<Message.TextMessage, 'entities' | 'text'>, parameters: string[]) => {
   //replace mention parameters with id
   if (!message.entities) return parameters
   message.entities.forEach((entity) => {
@@ -102,7 +111,7 @@ const replaceMentions = (message: Pick<Message.TextMessage, 'entities' | 'text'>
   return parameters
 }
 
-const sneakyAddId = async (ctx: PrismaChatContext, from: User) => {
+export const sneakyAddId = async (ctx: PrismaChatContext, from: User) => {
   if (!from.username) return
   const members = await listMembers(ctx)
   const thatMember = members.find((member) => member.account.slice(1) === from.username)
@@ -119,6 +128,6 @@ const sneakyAddId = async (ctx: PrismaChatContext, from: User) => {
       account: from.id.toString()
     }
   })
+  ctx.cache.del(thatMember.chatId.toString())
 }
 
-export { errorHandling, listMembers, resolveQuery, evaluate, replaceMentions, withLink, sneakyAddId }

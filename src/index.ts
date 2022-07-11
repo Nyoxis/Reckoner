@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import Fastify from 'fastify'
 import fastifyPrismaClient from './prismaPlugin'
+import NodeCache from 'node-cache'
 
 import config from './config'
 import botPlugin from './botPlugin'
@@ -13,6 +14,15 @@ const start = async () => {
   fastify.register(fastifyPrismaClient)
   fastify.register(botPlugin)
   
+  const cache = new NodeCache({ stdTTL: 600 })
+  
+  fastify
+    .decorate('cache', cache)
+    .addHook('onClose', (fastify, done) => {
+      fastify.cache.close()
+      done()
+    })
+  
   try {
     await fastify.listen(config.PORT)
   } catch (err) {
@@ -22,3 +32,9 @@ const start = async () => {
 }
 
 start()
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    cache: NodeCache
+  }
+}
