@@ -18,8 +18,8 @@ import {
 import {
   default as billMIddleware,
   composeCommand,
-  rectifyCommand,
 } from './middlewares/billMiddleware'
+import { rectifyCommand } from './middlewares/rectifyMiddleware'
 import { 
   buyMiddleware,
   orderMiddleware,
