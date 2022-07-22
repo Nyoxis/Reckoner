@@ -1,10 +1,10 @@
-import { MemberWithUsername } from './../constants/types';
-import config from '../config'
+
 import { numericFilter, usernameFilter, alphabeticalFilter } from '../constants'
 import { errorHandling, listMembers, replaceMentions, resolveQuery, withLink } from '../constants/functions'
 
-import type { Member } from '@prisma/client'
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
+import type { MemberWithUsername } from '../constants/types'
+import type { Member } from '@prisma/client'
 
 const includeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   let names: string[]
@@ -71,27 +71,26 @@ type manageFnType = (
   arg2: boolean | undefined,
   arg3: memberUpdateType
 ) => void
-const manageMembers: manageFnType = async (ctx, onCompleteWord, onActive, memberUpdate) => {
+
+const manageMembersCommand: manageFnType = async (ctx, onCompleteWord, onActive, memberUpdate) => {
   let names: string[]
   names = ctx.message.text.split(' ').slice(1)
   names = replaceMentions(ctx.message, names)
   
-  errorHandling(ctx, async () => {
-    const members = await listMembers(ctx, onActive)
-    const removal = resolveQuery(members, names)
-    const removedPromise = removal.map(memberUpdate)
-    const removed = await Promise.all(removedPromise)
-    ctx.cache.del(ctx.chat.id)
-    
-    if (removal.length !== removed.length) throw new Error('error while deleting member')
-    const m = removal.length > 1
-    const text = `Участник${m ? 'и' : ''} ${removal.map(member => member.linkName()).join(', ')} ${onCompleteWord}${m ? 'ы' : ''}`
-    ctx.reply(text, { reply_to_message_id: ctx.message.message_id, parse_mode: 'MarkdownV2' })
-  })
+  const members = await listMembers(ctx, onActive)
+  const managing = resolveQuery(members, names)
+  const managedPromise = managing.map(memberUpdate)
+  const managed = await Promise.all(managedPromise)
+  ctx.cache.del(ctx.chat.id)
+  
+  if (managing.length !== managed.length) throw new Error('error while deleting member')
+  const m = managing.length > 1
+  const text = `Участник${m ? 'и' : ''} ${managing.map(member => member.linkName()).join(', ')} ${onCompleteWord}${m ? 'ы' : ''}`
+  ctx.reply(text, { reply_to_message_id: ctx.message.message_id, parse_mode: 'MarkdownV2' })
 }
 
 const excludeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
-  manageMembers(ctx, 'исключен', undefined, (member) => ctx.prisma.member.delete({
+  manageMembersCommand(ctx, 'исключен', undefined, (member) => ctx.prisma.member.delete({
     where: {
       chatId_account: {
         chatId: member.chatId,
@@ -102,7 +101,7 @@ const excludeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['t
 }
 
 const freezeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
-  manageMembers(ctx, 'заморожен', true, (member) => ctx.prisma.member.update({
+  manageMembersCommand(ctx, 'заморожен', true, (member) => ctx.prisma.member.update({
     where: {
       chatId_account: {
         chatId: member.chatId,
@@ -114,7 +113,7 @@ const freezeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['te
 }
 
 const unfreezeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
-  manageMembers(ctx, 'разморожен', false, (member) => ctx.prisma.member.update({
+  manageMembersCommand(ctx, 'разморожен', false, (member) => ctx.prisma.member.update({
     where: {
       chatId_account: {
         chatId: member.chatId,

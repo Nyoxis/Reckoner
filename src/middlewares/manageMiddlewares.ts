@@ -12,7 +12,7 @@ const listKeyboard = async (ctx: PrismaChatContext) => {
   ]
   buttons = buttons.concat(members.map((member) => {
     const data = ['ac', member.account].join(';')
-    return [Markup.button.callback(member.displayName(), data)]
+    return [Markup.button.callback(`${member.active ? '' : '❆'}${member.displayName()}`, data)]
   }))
   const markup = Markup.inlineKeyboard(buttons)
   const text = 'Полный список участников'
@@ -29,7 +29,8 @@ const memberActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callb
   if(!ctx.callbackQuery.message) return next()
   const message = ctx.callbackQuery.message
   if (!ctx.callbackQuery.data) return
-  
+  if (!ctx.chat) return
+
   const members = await listMembers(ctx, undefined)
   
   let text: string
@@ -37,26 +38,47 @@ const memberActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callb
 
   const type = ctx.callbackQuery.data.split(';')[0]
   switch(type) {
-    case 'mg':
-      ({ text, markup } = await listKeyboard(ctx))
-      break
-      
     case 'ac':
       const acParticipant = ctx.callbackQuery.data.split(';')[1]
       const acParticipantMember = members.find(member => member.account === acParticipant)
       const acParticipantLink = acParticipantMember ? acParticipantMember.linkName() : ''
       
+      if (!acParticipantMember) throw new Error('cannot find member to manage')
       const buttons = [
         [Markup.button.callback('назад', 'mg')],
-        [Markup.button.callback('заморозить', 'mg')],
-        [Markup.button.callback('обнулить', 'mg')],
-        [Markup.button.callback('удалить', 'mg')],
+        [Markup.button.callback(
+            acParticipantMember.active ? 'заморозить' : 'разморозить',
+            `fz;${acParticipantMember.account}`
+          )],
+        [Markup.button.callback('обнулить', 'sz')],
+        [Markup.button.callback('удалить', 'xc')],
       ]
       
       text = `Выберите действие для участника ${acParticipantLink}`
       markup = Markup.inlineKeyboard(buttons)
       break
       
+    case 'fz':
+      const fzParticipant = ctx.callbackQuery.data.split(';')[1]
+      const fzParticipantMember = members.find(member => member.account === fzParticipant)
+      
+      if (!fzParticipantMember) throw new Error('cannot find member to freeze')
+      await ctx.prisma.member.update({
+        where: {
+          chatId_account: {
+            chatId: fzParticipantMember.chatId,
+            account: fzParticipantMember.account,
+          }
+        },
+        data: { active: !fzParticipantMember.active }
+      })
+      ctx.cache.del(ctx.chat.id)
+
+    case 'mg':
+    case 'fz':
+      ({ text, markup } = await listKeyboard(ctx))
+      break
+
     default: return next()
   }
   
