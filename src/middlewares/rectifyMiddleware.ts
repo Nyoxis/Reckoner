@@ -1,4 +1,4 @@
-import { numericSymbolicFilter } from '../constants'
+import { numericSymbolicFilter, escapeChars } from '../constants'
 import { evaluate } from '../constants/functions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from "telegraf"
@@ -15,7 +15,7 @@ const rectifyCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['inli
   numeric = parameters.find(parameter => numericSymbolicFilter.test(parameter))
   if (!numeric) return ctx.answerInlineQuery([])
   
-  const text = query.replace(numeric, numeric.replace(/([+()\-*\/])/g, match => '\\' + match))
+  const text = escapeChars(query)
   let sum: number
   try {
     sum = Math.trunc(evaluate(numeric) * 100)/100

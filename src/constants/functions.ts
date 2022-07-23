@@ -1,8 +1,8 @@
 import mexp from 'math-expression-evaluator'
 import { MemberWithLink } from './types'
 
-import type { NarrowedContext, Context, Types } from 'telegraf'
-import type { Message, User } from 'telegraf/typings/core/types/typegram'
+import type { NarrowedContext, Context, Types, Markup, TelegramError } from 'telegraf'
+import type { Message, User, InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram'
 import type { PrismaChatContext, MemberWithUsername } from './types'
 import type { MemberWithKind } from './accountKind'
 
@@ -16,6 +16,28 @@ export const errorHandling = async (
     if (typeof err === 'string') {
       ctx.reply(err, { reply_to_message_id: ctx.message.message_id })
     } else throw err
+  }
+}
+
+export const updateKeyboard = async (
+  ctx: NarrowedContext<Context, Types.MountMap['callback_query']>,
+  text: string,
+  markup: Markup.Markup<InlineKeyboardMarkup>,
+) => {
+  if(!ctx.callbackQuery.message) return
+  const message = ctx.callbackQuery.message
+  if ('text' in message && message.text === text && message.reply_markup === markup.reply_markup) return
+  try {
+    await ctx.telegram.editMessageText(
+      message.chat.id,
+      message.message_id,
+      undefined,
+      text,
+      { parse_mode: 'MarkdownV2', reply_markup: markup.reply_markup }
+    )
+  } catch(e) {
+    const err = e as TelegramError
+    if (err.code !== 400) throw e
   }
 }
 
@@ -68,25 +90,19 @@ export const listMembers = async (ctx: PrismaChatContext, active?: boolean): Pro
   return membersWithLink
 }
 
+export const nameMemberCmp = (name: string, member: MemberWithLink) => {
+  return member.getKind() === 'USER'
+  ? member.username
+      ? !name.slice(1).localeCompare(member.username, 'en', { sensitivity: 'base' })
+      : !name.slice(1).localeCompare(member.account, 'en', { sensitivity: 'base' })
+  : !name.localeCompare(member.account, 'ru', { sensitivity: 'base' })
+}
+
 export const resolveQuery = (members: MemberWithLink[], queryMembers: string[]) => {
-  const missing = queryMembers.filter(query => {
-    return !members.some(member => (member.getKind() === 'USER' && member.username)
-      ? member.username === query.slice(1)
-      : (query.startsWith('@') && !member.account.startsWith('@'))
-          ? member.account === query.slice(1)
-          : member.account === query
-    )
-  })
+  const missing = queryMembers.filter(query => !members.some(member => nameMemberCmp(query, member)))
   if (missing.length) throw `Участник${missing.length>1 ? 'и' : ''} ${missing.join(', ')} не найден${missing.length>1 ? 'ы' : ''}`
   
-  const foundMembers = members.filter(member => (member.getKind() === 'USER' && member.username)
-      ? queryMembers.some(query => (query.slice(1) === member.username))
-      : queryMembers.some(query => {
-        return (query.startsWith('@') && !member.account.startsWith('@'))
-          ? query.slice(1) === member.account
-          : query === member.account
-      })
-  )
+  const foundMembers = members.filter(member => queryMembers.some(query => nameMemberCmp(query, member)))
   return foundMembers
 }
 
@@ -113,8 +129,11 @@ export const replaceMentions = (message: Pick<Message.TextMessage, 'entities' | 
 
 export const sneakyAddId = async (ctx: PrismaChatContext, from: User) => {
   if (!from.username) return
+  const username = from.username
   const members = await listMembers(ctx)
-  const thatMember = members.find((member) => member.account.slice(1) === from.username)
+  const thatMember = members.find((member) => {
+      return !member.account.slice(1).localeCompare(username, 'en', { sensitivity: 'base' })
+    })
   
   if (!thatMember) return
   await ctx.prisma.member.update({
@@ -128,6 +147,6 @@ export const sneakyAddId = async (ctx: PrismaChatContext, from: User) => {
       account: from.id.toString()
     }
   })
-  ctx.cache.del(thatMember.chatId.toString())
+  ctx.cache.del(Number(thatMember.chatId))
 }
 

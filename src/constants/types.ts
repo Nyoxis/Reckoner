@@ -1,7 +1,9 @@
 import type { NarrowedContext, Context, Types } from 'telegraf'
+import { escapeChars } from '.'
 import type { MemberWithKind } from './accountKind'
 
 export type MemberWithUsername = MemberWithKind & { username: string | undefined, name: string }
+
 
 export class MemberWithLink implements MemberWithUsername {
   chatId: bigint
@@ -24,7 +26,7 @@ export class MemberWithLink implements MemberWithUsername {
   }
   linkName = ():string => {
     const userLink = `[${this.name}](tg://user?id=${this.account})`
-    return `${this.username ? '@' + this.username : this.getKind() === 'USER' ? userLink : this.account}`
+    return `${this.username ? '@' + escapeChars(this.username) : this.getKind() === 'USER' ? userLink : escapeChars(this.account)}`
   }
 }
 

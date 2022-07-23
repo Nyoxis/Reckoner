@@ -29,7 +29,7 @@ import {
 import {
   undoMiddleware,
   redoMiddleware,
-} from './middlewares/historyMiddlewares'
+} from './middlewares/undoMiddlewares'
 import updateMiddleware from './middlewares/updateMiddleware'
 
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'

@@ -1,6 +1,7 @@
 import { Markup } from 'telegraf'
 
-import { listMembers } from '../constants/functions'
+import { escapeChars } from '../constants'
+import { listMembers, updateKeyboard } from '../constants/functions'
 import { getBill, getDonorsDebtors } from '../constants/billFunctions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
@@ -21,14 +22,24 @@ const listKeyboard = async (ctx: PrismaChatContext) => {
     const data = ['op', member.account].join(';')
      return [Markup.button.callback(`${member.displayName()} ${member.totalSum} ${member.unfrozenSum !== member.totalSum ? member.unfrozenSum : ''}`, data)]
   })
-  memberButtons.push([Markup.button.callback('/order - заказ на счет или по депозиту', ['ad', '', '/order'].join(';'))])
+
+  let billText
+  if (activeMembers.length !== 0) {
+    memberButtons.push([Markup.button.callback('/order - заказ на счет или по депозиту', ['ad', '', '/order'].join(';'))])
+    
+    billText = `Список дебетов и долгов_\\(со знаком минус\\)_\n` +
+               `Общий баланс _\\(внешний дебет/долг\\)_: *${escapeChars(totalBalance.toString())}*\n`
+    if (unfrozenBalance !== totalBalance) {
+      billText += `Баланс незамороженных участников: *${escapeChars(unfrozenBalance.toString())}*\n`
+    }
+  } else {
+    billText = 'Участников нет или все заморожены'
+  }
+  
   memberButtons.push([Markup.button.callback('править список', 'mg')])
   
-  let billText = `Список дебетов и долгов_\\(со знаком минус\\)_\n` +
-                 `Общий баланс _\\(внешний дебет/долг\\)_: *${totalBalance.toString().replace('-', '\\-')}*\n`
-  if (unfrozenBalance !== totalBalance) {
-    billText += `Баланс незамороженных участников: *${unfrozenBalance.toString().replace('-', '\\-')}*\n`
-  }
+
+
   
   return { text: billText, markup: Markup.inlineKeyboard(memberButtons) }
 }
@@ -72,16 +83,16 @@ const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['call
       ]
 
       const { principalDebt, principalPart, donorsDebtors } = await getDonorsDebtors(ctx, opDonorMember)
-      text = `Дебет/долг участника *${opDonorLink}*: *${principalDebt.toString().replace('-', '\\-')}*\n`
+      text = `Дебет/долг участника *${opDonorLink}*: *${escapeChars(principalDebt.toString())}*\n`
       if (principalPart !== principalDebt) {
-        text += `Дебет/долг без учета замороженных: *${principalPart.toString().replace('-', '\\-')}*\n`
+        text += `Дебет/долг без учета замороженных: *${escapeChars(principalPart.toString())}*\n`
       }
       
       const donorsDebtorsRecords = donorsDebtors.map(donorDebtor => {
         let record = `  *${donorDebtor.active ? '' : '❆'}${donorDebtor.linkName()}*` +
-                     ` *${donorDebtor.debit.toString().replace('-', '')}*`
+                     ` *${escapeChars(donorDebtor.debit.toString())}*`
         if (donorDebtor.debit !== donorDebtor.debitUnfrozen) {
-          record += ` *${donorDebtor.debitUnfrozen.toString().replace('-', '')}*`
+          record += ` *${escapeChars(donorDebtor.debitUnfrozen.toString())}*`
         }
         return record
       })
@@ -166,17 +177,8 @@ const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['call
     default: return next()
   }
   
-  if ('text' in ctx.callbackQuery.message && ctx.callbackQuery.message.text === text) return next()
-  ctx.telegram.editMessageText(
-    message.chat.id,
-    message.message_id,
-    undefined,
-    text,
-    { parse_mode: 'MarkdownV2', reply_markup: markup.reply_markup }
-  )
+  updateKeyboard(ctx, text, markup)
 }
-
-
 
 export { getBill, composeCommand }
 export default billMIddleware
