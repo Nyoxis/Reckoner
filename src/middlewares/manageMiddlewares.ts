@@ -5,7 +5,7 @@ import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { InlineKeyboardMarkup, InlineKeyboardButton } from 'telegraf/typings/core/types/typegram'
 import type { PrismaChatContext } from '../constants/types'
 
-const listKeyboard = async (ctx: PrismaChatContext) => {
+const listManageKeyboard = async (ctx: PrismaChatContext) => {
   const members = await listMembers(ctx, undefined)
   const activeMembers = members.filter(member => member.active)
   
@@ -25,14 +25,13 @@ const listKeyboard = async (ctx: PrismaChatContext) => {
     text = 'Список участников пуст'
     buttons = []
   }
-  buttons.push([Markup.button.switchToCurrentChat('добавить участника', '/include ')])
-  
+  text = text + '\n\nЧтобы добавить участника удерживайте\n👉 /include и введите имя'
   const markup = Markup.inlineKeyboard(buttons)
   return { text, markup }
 }
 
 const manageMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
-  const { text, markup } = await listKeyboard(ctx)
+  const { text, markup } = await listManageKeyboard(ctx)
   ctx.reply(text, {reply_to_message_id: ctx.message.message_id, reply_markup: markup.reply_markup})
 }
 
@@ -44,7 +43,7 @@ const memberActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callb
   
   let text: string
   let markup: Markup.Markup<InlineKeyboardMarkup>
-
+  
   const type = ctx.callbackQuery.data.split(';')[0]
   switch(type) {
     case 'fz':
@@ -110,7 +109,6 @@ const memberActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callb
         [Markup.button.callback('назад', 'mg')],
         [Markup.button.callback('обнулить', `sz;${acParticipantMember.account}`)],
         [Markup.button.callback('удалить', `xc;${acParticipantMember.account}`)],
-        [Markup.button.switchToCurrentChat('заменить или переименовать участника', `/include ${acParticipantLink}*`)],
       ]
       
       text = `Выберите действие для участника ${acParticipantLink}\n\n` +
@@ -122,12 +120,12 @@ const memberActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callb
     case 'fz':
     case 'sz':
     case 'xc':
-      ({ text, markup } = await listKeyboard(ctx))
+      ({ text, markup } = await listManageKeyboard(ctx))
       break
     default: return next()
   }
   updateKeyboard(ctx, text, markup)
 }
 
-export { memberActions }
+export { memberActions, listManageKeyboard }
 export default manageMiddleware

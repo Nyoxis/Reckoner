@@ -7,8 +7,8 @@ import type { InlineQueryResultArticle } from 'telegraf/typings/core/types/typeg
 const rectifyCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['inline_query']>> = (ctx, next) => {
   const query = ctx.inlineQuery.query
 
-  const hasCommands = /(?:.*((\/include)|(\/pay)|(\/order)|(\/buy)|(\/give))+.*)/
-  if (!hasCommands.test(query)) return ctx.answerInlineQuery([])
+  const hasCommands = /(?:.*((\/rename)|(\/include)|(\/pay)|(\/order)|(\/buy)|(\/give))+.*)/
+  if (!hasCommands.test(query)) return
   
   const parameters = query.split(' ')
   let numeric: string | undefined = ''

@@ -1,13 +1,99 @@
 
 import { numericFilter, usernameFilter, alphabeticalFilter, escapeChars } from '../constants'
-import { errorHandling, listMembers, replaceMentions, nameMemberCmp, resolveQuery, withLink } from '../constants/functions'
+import { errorHandling, listMembers, replaceMentions, truncId, nameMemberCmp, resolveQuery, withLink } from '../constants/functions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { MemberWithLink, MemberWithUsername } from '../constants/types'
 import type { Member } from '@prisma/client'
 import { MemberWithKind } from '../constants/accountKind'
 
+type NamesOrName<T extends string | string[]> = T extends string ? string | undefined : string[]
+type FilteredNames = {
+  <T extends string | string[]>(
+    arg0: NarrowedContext<Context, Types.MountMap['text']>,
+    arg1: T,
+  ): Promise<{
+    filteredNames: NamesOrName<T>
+    missingText: string
+  }>
+  <T extends string | string[]>(
+    arg0: NarrowedContext<Context, Types.MountMap['text']>,
+    arg1: T,
+  ): Promise<{
+    filteredNames: string | string[] | undefined
+    missingText: string
+  }>
+}
+const filterInputNames: FilteredNames = async (ctx, namesOrName) => {
+  let names: string[]
+  if (!Array.isArray(namesOrName)) names = [namesOrName]
+    else names = namesOrName
+  
+  if (names.some(name => !name.startsWith('@') && !alphabeticalFilter.test(name))) {
+    throw 'Допустимые символы имени 0-9 а-я a-z, нижнее подчеркивание и точка, не менее 3 символов'
+  }
+  if (names.some(name => numericFilter.test(name))) throw 'Имена состоящие только из цифр не допускаются'
+  if (names.some(name => name.startsWith('@') && !usernameFilter.test(name))) throw 'Имя пользователя введено неверно'
+  
+  const existedMembers = await listMembers(ctx)
+  const alreadyOccupied = existedMembers.filter(member => names.some(name => nameMemberCmp(name, member)))
+  const filteredNames = names.filter(name => !alreadyOccupied.some(member => nameMemberCmp(name, member)))
+  
+  let missingText: string = ''
+  if (alreadyOccupied.length) {
+    const m = alreadyOccupied.length > 1
+    missingText = `Участник${m ? 'и' : ''} *` +
+    alreadyOccupied.map(member => member.linkName()).join(', ') +
+    `* ранее был${m ? 'и' : ''} добавлен${m ? 'ы' : ''}\\.\n`
+  }
+  
+  if (!Array.isArray(namesOrName)) return { filteredNames: filteredNames[0], missingText }
+    else return { filteredNames, missingText }
+}
 
+const renameMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
+  let names: string[]
+  names = ctx.message.text.split(' ').slice(1)
+  names = [...new Set(names)]
+  names = replaceMentions(ctx.message, names)
+  
+  errorHandling(ctx, async () => {
+    let reply: string = ''
+
+    if (names.length !== 2) throw 'Введите имя участника и новое имя'
+    const oldname = names[0]
+    const newname = names[1]
+    
+    const existedMembers = await listMembers(ctx)
+    const renaming = existedMembers.find(member => nameMemberCmp(oldname, member))
+    if (!renaming) throw `Участник ${oldname} не найден`
+    
+    const { filteredNames, missingText } = await filterInputNames(ctx, newname)
+    reply = reply + missingText
+
+    let renamed: MemberWithLink
+    if (filteredNames) {
+      const account = truncId(filteredNames)
+      renamed = await withLink(ctx, ctx.prisma.withKind(await ctx.prisma.member.update({
+        where: {
+          chatId_account: {
+            chatId: renaming.chatId,
+            account: renaming.account,
+          }
+        },
+        data: {
+          chat: { connect: { id: ctx.chat.id }},
+          account,
+        }
+      })))
+      ctx.cache.del(ctx.chat.id)
+
+      reply = reply + `Имя участника *${renaming.linkName()}* заменено на *${renamed.linkName()}*`
+    } else reply = reply + 'Имя не изменено'
+    
+    ctx.reply(reply, { reply_to_message_id: ctx.message?.message_id, parse_mode: 'MarkdownV2' })
+  })
+}
 
 const includeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   let names: string[]
@@ -17,80 +103,31 @@ const includeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['t
   
   errorHandling(ctx, async () => {
     let reply: string = ''
-    const existedMembers = await listMembers(ctx)
-
-    let forReplace: {
-      name: string,
-      member: MemberWithLink,
-    }[] = []
-    let missingSubs: string[] = []
-    names = names.map(name => {
-      const substitutes = name.split('*')
-      if (substitutes.length > 2) throw 'Ожидается одна звездочка между двумя именами'
-      if (substitutes.length < 2) return name
-      const replacable = existedMembers.find(member => nameMemberCmp(substitutes[0], member))
-      if (replacable) forReplace.push({ name: substitutes[1], member: replacable })
-        else missingSubs.push(substitutes[0])
-      return substitutes[1]
-    })
     
-    if(missingSubs.length) {
-      const m = missingSubs.length > 1
-      reply = reply + `Им${m ? 'ена' : 'я'} *` +
-                      missingSubs.map(escapeChars).join(', ') +
-                      `* не найден${m ? 'ы' : ''} в списке участников и не ${m ? 'могут' : 'может'} быть заменен${m ? 'ы' : ''}\\.\n`
-    }
-    names = names.filter(name => !missingSubs.some(sub => sub === name))
+    const { filteredNames, missingText } = await filterInputNames(ctx, names)
+    reply = reply + missingText
     
-    if (names.some(name => !name.startsWith('@') && !alphabeticalFilter.test(name))) {
-      throw 'Допустимые символы имени 0-9 а-я a-z, нижнее подчеркивание и точка, не менее 3 символов'
-    }
-    if (names.some(name => numericFilter.test(name))) throw 'Имена состоящие только из цифр не допускаются'
-    if (names.some(name => name.startsWith('@') && !usernameFilter.test(name))) throw 'Имя пользователя введено неверно'
-    
-    const alreadyOccupied = existedMembers.filter(member => names.some(name => nameMemberCmp(name, member)))
-    names = names.filter(name => !alreadyOccupied.some(member => nameMemberCmp(name, member)))
-    
-    if (alreadyOccupied.length) {
-      const m = alreadyOccupied.length > 1
-      reply = reply + `Участник${m ? 'и' : ''} *` +
-      alreadyOccupied.map(member => member.linkName()).join(', ') +
-      `* ранее был${m ? 'и' : ''} добавлен${m ? 'ы' : ''}\\.\n`
-    }
-    
-    const includedListPromises = names.map(async (name) => {
-      const account = /^@[0-9]+$/.test(name) ? name.slice(1) : name
-      
-      const sub = forReplace.find(sub => sub.name === name)
+    const includedListPromises = filteredNames.map(async (name) => {
+      const account = truncId(name)
       let member: MemberWithKind
-      if (sub) {
-        member = ctx.prisma.withKind(await ctx.prisma.member.update({
-          where: {
-            chatId_account: {
-              chatId: sub.member?.chatId,
-              account: sub.member?.account,
-            }
-          },
-          data: {
-            chat: { connect: { id: ctx.chat.id }},
-            account,
-          }
-        }))
-      } else {
-        member = ctx.prisma.withKind(await ctx.prisma.member.create({
-          data: {
-            chat: { connect: { id: ctx.chat.id }},
-            account,
-          }
-        }))
-      }
+      
+      member = ctx.prisma.withKind(await ctx.prisma.member.create({
+        data: {
+          chat: { connect: { id: ctx.chat.id }},
+          account,
+        }
+      }))
+      
       return await withLink(ctx, member)
     })
     const includedList = await Promise.all(includedListPromises)
     ctx.cache.del(ctx.chat.id)
     
     const m = includedList.length > 1
-    reply = includedList.length ? reply + `Добавлен${m ? 'ы' : ''} участник${m ? 'и' : ''} *${includedList.map(member => member.linkName()).join(', ')}*` : reply + 'Никто не добавлен'
+    reply = includedList.length
+      ? reply + `Добавлен${m ? 'ы' : ''} участник${m ? 'и' : ''} *` +
+                 includedList.map(member => member.linkName()).join(', ') + `*`
+      : reply + 'Никто не добавлен'
     ctx.reply(reply, { reply_to_message_id: ctx.message?.message_id, parse_mode: 'MarkdownV2' })
   })
 }
@@ -157,4 +194,4 @@ const unfreezeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['
   }))
 }
 
-export { includeMiddleware, excludeMiddleware, freezeMiddleware, unfreezeMiddleware }
+export { renameMiddleware, includeMiddleware, excludeMiddleware, freezeMiddleware, unfreezeMiddleware }

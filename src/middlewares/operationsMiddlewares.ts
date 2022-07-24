@@ -45,7 +45,7 @@ const getExecuteTransaction = (
       chat: {
         connect: { id: ctx.chat.id }
       },
-      message_id: ctx.message.message_id,
+      messageId: ctx.message.message_id,
       donor: donorArg,
       hasDonor: !!donor,
       recipients: {
@@ -77,7 +77,7 @@ const getExecuteTransaction = (
         id: transaction.id
       },
       data: {
-        reply_id: reply.message_id
+        replyId: reply.message_id
       }
     })
   }

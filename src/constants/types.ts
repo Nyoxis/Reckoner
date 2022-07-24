@@ -1,9 +1,9 @@
 import type { NarrowedContext, Context, Types } from 'telegraf'
 import { escapeChars } from '.'
 import type { MemberWithKind } from './accountKind'
+import type { Record } from '@prisma/client'
 
 export type MemberWithUsername = MemberWithKind & { username: string | undefined, name: string }
-
 
 export class MemberWithLink implements MemberWithUsername {
   chatId: bigint
@@ -27,6 +27,53 @@ export class MemberWithLink implements MemberWithUsername {
   linkName = ():string => {
     const userLink = `[${this.name}](tg://user?id=${this.account})`
     return `${this.username ? '@' + escapeChars(this.username) : this.getKind() === 'USER' ? userLink : escapeChars(this.account)}`
+  }
+}
+export type RecordWithRecipients = {
+  id: bigint
+  active: boolean
+  recipients: {
+      account: string
+  }[]
+  messageId: bigint
+  replyId: bigint | null
+  chatId: bigint
+  donorAccount: string | null
+  hasDonor: boolean
+  recipientsQuantity: number
+  amount: number
+}
+export class RecordWithType implements RecordWithRecipients {
+  id: bigint
+  active: boolean
+  recipients: {
+      account: string
+  }[]
+  messageId: bigint
+  replyId: bigint | null
+  chatId: bigint
+  donorAccount: string | null
+  hasDonor: boolean
+  recipientsQuantity: number
+  amount: number
+  
+  constructor(record: RecordWithRecipients) {
+    this.id = record.id
+    this.active = record.active
+    this.recipients = record.recipients
+    this.messageId = record.messageId
+    this.replyId = record.replyId
+    this.chatId = record.chatId
+    this.donorAccount = record.donorAccount
+    this.hasDonor = record.hasDonor
+    this.recipientsQuantity = record.recipientsQuantity
+    this.amount = record.amount
+  }
+  getType = ():'order' |'pay' | 'buy' | 'give' => {
+    if (!this.hasDonor) return 'order'
+    else if (!this.recipientsQuantity) return 'pay'
+    else if (this.recipients.some(recipient => recipient.account === this.donorAccount)) return 'buy'
+    else return 'give'
   }
 }
 

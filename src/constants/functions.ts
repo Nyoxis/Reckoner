@@ -1,9 +1,9 @@
 import mexp from 'math-expression-evaluator'
-import { MemberWithLink } from './types'
+import { MemberWithLink, RecordWithType } from './types'
 
 import type { NarrowedContext, Context, Types, Markup, TelegramError } from 'telegraf'
 import type { Message, User, InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram'
-import type { PrismaChatContext, MemberWithUsername } from './types'
+import type { PrismaChatContext, MemberWithUsername, RecordWithRecipients } from './types'
 import type { MemberWithKind } from './accountKind'
 
 export const errorHandling = async (
@@ -98,6 +98,45 @@ export const nameMemberCmp = (name: string, member: MemberWithLink) => {
   : !name.localeCompare(member.account, 'ru', { sensitivity: 'base' })
 }
 
+type RecordOrRecords<T extends RecordWithRecipients | RecordWithRecipients[]> = T extends RecordWithRecipients ? RecordWithType : RecordWithType[]
+type WithType = {
+  <T extends RecordWithRecipients | RecordWithRecipients[]>(arg0: T): Promise<RecordOrRecords<T>>
+  (arg0: RecordWithRecipients | RecordWithRecipients[]): Promise<RecordWithType | RecordWithType[]>
+}
+export const withType: WithType = async ( transaction: RecordWithRecipients | RecordWithRecipients[] ) => {
+  const getType = async (transaction: RecordWithRecipients): Promise<RecordWithType> => {
+    return new RecordWithType(transaction)
+  }
+  
+  if (Array.isArray(transaction)) {
+    return await Promise.all(transaction.map(getType))
+  } else return await getType(transaction)
+}
+
+export const listTransactions = async (ctx: PrismaChatContext, active?: boolean): Promise<RecordWithType[]> => {
+  if (!ctx.chat) return []
+  const transactions = await ctx.prisma.record.findMany({
+    select: {
+      id: true,
+      messageId: true,
+      replyId: true,
+      chatId: true,
+      donorAccount: true,
+      hasDonor: true,
+      recipientsQuantity: true,
+      amount: true,
+      active: true,
+      recipients: {
+        select: {
+          account: true,
+        }
+      }
+    },
+    where: { chatId: ctx.chat.id, active }
+  })
+  return withType(transactions)
+}
+
 export const resolveQuery = (members: MemberWithLink[], queryMembers: string[]) => {
   const missing = queryMembers.filter(query => !members.some(member => nameMemberCmp(query, member)))
   if (missing.length) throw `Участник${missing.length>1 ? 'и' : ''} ${missing.join(', ')} не найден${missing.length>1 ? 'ы' : ''}`
@@ -126,6 +165,8 @@ export const replaceMentions = (message: Pick<Message.TextMessage, 'entities' | 
   })
   return parameters
 }
+
+export const truncId = (name: string) => /^@[0-9]+$/.test(name) ? name.slice(1) : name
 
 export const sneakyAddId = async (ctx: PrismaChatContext, from: User) => {
   if (!from.username) return

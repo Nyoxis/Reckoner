@@ -3,13 +3,11 @@ import { Markup } from 'telegraf'
 import { escapeChars } from '../constants'
 import { listMembers, updateKeyboard } from '../constants/functions'
 import { getBill, getDonorsDebtors } from '../constants/billFunctions'
+import { listManageKeyboard } from './manageMiddlewares'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { PrismaChatContext, MemberWithLink } from '../constants/types'
-import type {
-  InlineKeyboardButton,
-  InlineKeyboardMarkup,
-} from 'telegraf/typings/core/types/typegram'
+import type { InlineKeyboardButton, InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram'
 
 const listKeyboard = async (ctx: PrismaChatContext) => {
   const members = await getBill(ctx)
@@ -17,12 +15,12 @@ const listKeyboard = async (ctx: PrismaChatContext) => {
   const unfrozenBalance = members.reduce((unfrozen, member) => member.active ? unfrozen + member.unfrozenSum : unfrozen, 0)
   
   const activeMembers = members.filter(member => member.active)
-  const memberButtons: InlineKeyboardButton[][] = activeMembers.map((member) => {
-    
+  const memberButtons = activeMembers.map((member) => {
     const data = ['op', member.account].join(';')
-     return [Markup.button.callback(`${member.displayName()} ${member.totalSum} ${member.unfrozenSum !== member.totalSum ? member.unfrozenSum : ''}`, data)]
+    const sum = member.unfrozenSum !== member.totalSum ? member.unfrozenSum : ''
+    return [Markup.button.callback(`${member.displayName()} ${member.totalSum} ${sum}`, data)]
   })
-
+  
   let billText
   if (activeMembers.length !== 0) {
     memberButtons.push([Markup.button.callback('/order - заказ на счет или по депозиту', ['ad', '', '/order'].join(';'))])
@@ -33,13 +31,11 @@ const listKeyboard = async (ctx: PrismaChatContext) => {
       billText += `Баланс незамороженных участников: *${escapeChars(unfrozenBalance.toString())}*\n`
     }
   } else {
-    billText = 'Участников нет или все заморожены'
+    return await listManageKeyboard(ctx)
   }
   
   memberButtons.push([Markup.button.callback('править список', 'mg')])
-  
-
-
+  memberButtons.push([Markup.button.callback('история операций', 'hs')])
   
   return { text: billText, markup: Markup.inlineKeyboard(memberButtons) }
 }

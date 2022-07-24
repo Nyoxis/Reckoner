@@ -36,7 +36,7 @@ const getExecuteUpdate = (
         chat: {
           connect: { id: update.chat.id }
         },
-        message_id: record.message_id,
+        messageId: record.messageId,
         donor: donorArg,
         recipients: {
           update: recipientsUpdate,
@@ -47,7 +47,7 @@ const getExecuteUpdate = (
     })
     const text = transaction.amount.toString()
     if (('text' in update.editedMessage) && text !== update.editedMessage.text) {
-      update.telegram.editMessageText(update.chat.id, Number(record.reply_id), undefined, text)
+      update.telegram.editMessageText(update.chat.id, Number(record.replyId), undefined, text)
     }
   }
 }
@@ -76,13 +76,13 @@ const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['ed
   
   const record = await update.prisma.record.findUnique({
     where: {
-      message_id_chatId: {
-        message_id: id,
+      messageId_chatId: {
+        messageId: id,
         chatId: chat.id,
       }
     }
   })
-  if (!record?.reply_id) return next()
+  if (!record?.replyId) return next()
   const ctx = {
     message: update.editedMessage,
     chat: update.chat,
@@ -97,28 +97,28 @@ const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['ed
     case '/buy':
       editedErrorHandling(
         update,
-        Number(record.reply_id),
+        Number(record.replyId),
         await transactionCommand(ctx, buyRequisites, getExecuteUpdate(update, record))
       )
       break
     case '/order':
       editedErrorHandling(
         update,
-        Number(record.reply_id),
+        Number(record.replyId),
         await transactionCommand(ctx, orderRequisites, getExecuteUpdate(update, record), false)
       )
       break
     case '/pay':
       editedErrorHandling(
         update,
-        Number(record.reply_id),
+        Number(record.replyId),
         await transactionCommand(ctx, payRequisites, getExecuteUpdate(update, record))
       )
       break
     case '/give':
       editedErrorHandling(
         update,
-        Number(record.reply_id),
+        Number(record.replyId),
         await transactionCommand(ctx, giveRequisites, getExecuteUpdate(update, record))
       )
       break
@@ -129,7 +129,7 @@ const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['ed
         data: { active: false },
       })
       if (reply_text !== update.editedMessage.text) {
-        update.telegram.editMessageText(update.chat.id, Number(record.reply_id), undefined, reply_text)
+        update.telegram.editMessageText(update.chat.id, Number(record.replyId), undefined, reply_text)
       }
   }
 }

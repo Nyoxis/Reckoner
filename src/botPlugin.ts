@@ -5,20 +5,30 @@ import config from './config'
 import checkMiddleware from './middlewares/checkMiddleware'
 import { sneakyAddId } from './constants/functions'
 import startMiddleware from './middlewares/startMiddleware'
+
+import {
+  default as billMIddleware,
+  composeCommand,
+} from './middlewares/billMiddleware'
+
 import {
   default as manageMiddleware,
   memberActions,
 } from './middlewares/manageMiddlewares'
+
 import {
+  default as historyMiddleware,
+  historyActions,
+} from './middlewares/historyMiddlewares'
+
+import {
+  renameMiddleware,
   includeMiddleware,
   excludeMiddleware,
   freezeMiddleware,
   unfreezeMiddleware,
 } from './middlewares/includeMiddlewares'
-import {
-  default as billMIddleware,
-  composeCommand,
-} from './middlewares/billMiddleware'
+
 import { rectifyCommand } from './middlewares/rectifyMiddleware'
 import { 
   buyMiddleware,
@@ -64,17 +74,22 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   })
   
   bot.start(startMiddleware)
+
+  bot.command('bill', billMIddleware)
+  bot.on('callback_query', composeCommand)
+  bot.on('inline_query', rectifyCommand)
+  
   bot.command('manage', manageMiddleware)
   bot.on('callback_query', memberActions)
   
+  bot.command('history', historyMiddleware)
+  bot.on('callback_query', historyActions)
+  
+  bot.command('rename', renameMiddleware)
   bot.command('include', includeMiddleware)
   bot.command('exclude', excludeMiddleware)
   bot.command('freeze', freezeMiddleware)
   bot.command('unfreeze', unfreezeMiddleware)
-  
-  bot.command('bill', billMIddleware)
-  bot.on('callback_query', composeCommand)
-  bot.on('inline_query', rectifyCommand)
   
   bot.command('pay', payMiddleware)
   bot.command('order', orderMiddleware)

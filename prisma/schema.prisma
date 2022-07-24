@@ -45,8 +45,8 @@ model RecordOfRecipient {
 
 model Record {
   id BigInt @id @unique @default(autoincrement())
-  message_id BigInt
-  reply_id BigInt?
+  messageId BigInt
+  replyId BigInt?
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   chatId BigInt
   donor Member? @relation(fields: [donorChat, donorAccount], references: [chatId, account], onDelete: SetNull)
@@ -58,7 +58,7 @@ model Record {
   amount Int @default(0)
   active Boolean @default(true)
 
-  @@unique([message_id, chatId])
+  @@unique([messageId, chatId])
 }
 
 model Chat {
