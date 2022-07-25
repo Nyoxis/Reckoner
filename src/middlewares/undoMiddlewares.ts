@@ -6,7 +6,8 @@ const undoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
   errorHandling(ctx, async () => {
     const latestRecord = await ctx.prisma.record.findFirst({
       select: {
-        id: true
+        id: true,
+        chatId: true,
       },
       orderBy: {
         id: 'desc'
@@ -21,7 +22,10 @@ const undoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
     
     const updatedRecord = await ctx.prisma.record.update({
       where: {
-        id: latestRecord?.id
+        chatId_id: {
+          id: latestRecord?.id,
+          chatId: latestRecord?.chatId
+        }
       },
       data: {
         active: false
@@ -35,7 +39,8 @@ const redoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
   errorHandling(ctx, async () => {
     const latestRecord = await ctx.prisma.record.findFirst({
       select: {
-        id: true
+        id: true,
+        chatId: true,
       },
       orderBy: {
         id: 'asc'
@@ -50,7 +55,10 @@ const redoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
     
     const updatedRecord = await ctx.prisma.record.update({
       where: {
-        id: latestRecord?.id
+        chatId_id: {
+          id: latestRecord?.id,
+          chatId: latestRecord?.chatId
+        }
       },
       data: {
         active: true

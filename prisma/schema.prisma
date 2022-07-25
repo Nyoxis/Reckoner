@@ -33,32 +33,35 @@ model Member {
 }
 
 model RecordOfRecipient {
-  member Member @relation(fields: [chatId, account], references: [chatId, account], onDelete: Cascade)
-  chatId BigInt // relation scalar field (used in the `@relation` attribute above)
+  member Member @relation(fields: [memberChatId, account], references: [chatId, account], onDelete: Cascade)
+  memberChatId BigInt // relation scalar field (used in the `@relation` attribute above)
   account String
-  record Record @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  record Record @relation(fields: [recordId, chatId], references: [chatId, id], onDelete: Cascade)
   recordId BigInt
+  chatId BigInt
   // relation scalar field (used in the `@relation` attribute above)
   
   @@id([chatId, account, recordId])
 }
 
 model Record {
-  id BigInt @id @unique @default(autoincrement())
+  id BigInt @default(autoincrement())
   messageId BigInt
   replyId BigInt?
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   chatId BigInt
-  donor Member? @relation(fields: [donorChat, donorAccount], references: [chatId, account], onDelete: SetNull)
-  donorChat BigInt?
+  donor Member? @relation(fields: [donorChatId, donorAccount], references: [chatId, account], onDelete: SetNull)
+  donorChatId BigInt?
   donorAccount String?
   hasDonor Boolean
   recipients RecordOfRecipient[]
   recipientsQuantity Int
   amount Int @default(0)
   active Boolean @default(true)
-
-  @@unique([messageId, chatId])
+  
+  @@id([chatId, id])
+  @@unique([chatId, id])
+  @@unique([chatId, messageId])
 }
 
 model Chat {

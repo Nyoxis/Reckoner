@@ -14,67 +14,56 @@ const getExecuteTransaction = (
     recipients: Member[],
     amount: number,
   ) => {
-    const firstActive = await ctx.prisma.record.findFirst({
+    const lastActive = await ctx.prisma.record.findFirst({
       select: {
-        id: true
+        id: true,
+        chatId: true,
       },
       orderBy: {
         id: 'desc'
       },
       where: {
-        active: true
+        chatId: ctx.chat.id,
+        active: true,
       },
     })
-    const nextInactive = await ctx.prisma.record.findFirst({
-      select: {
-        id: true
-      },
-      orderBy: {
-        id: 'asc'
-      },
+
+    const recordId = lastActive? lastActive.id + 1n : 1
+    const donorArg = donor ? { connect: { chatId_account: { chatId: donor.chatId, account: donor.account } } } : {}
+    
+    await ctx.prisma.record.deleteMany({
       where: {
-        active: false
-      },
-      cursor: {
-        id: firstActive ? firstActive.id : 0
+        id: recordId,
+        chatId: ctx.chat.id,
       }
     })
-    
-    const donorArg = donor ? { connect: { chatId_account: { chatId: donor.chatId, account: donor.account } } } : {}
-    const data = {
-      chat: {
-        connect: { id: ctx.chat.id }
-      },
-      messageId: ctx.message.message_id,
-      donor: donorArg,
-      hasDonor: !!donor,
-      recipients: {
-        createMany: {
-          data: recipients.map(recipient => ({ chatId: recipient.chatId, account: recipient.account }))
-        }
-      },
-      recipientsQuantity: recipients.length,
-      amount: Math.trunc(amount),
-      active: true,
-    }
-    let transaction: Record
-    if (nextInactive) {
-      transaction = await ctx.prisma.record.update({
-        where: {
-          id: nextInactive.id
+    const transaction = await ctx.prisma.record.create({
+      data: {
+        id: recordId,
+        chat: {
+          connect: { id: ctx.chat.id }
         },
-        data: { id: nextInactive.id, ...data }
-      })
-    } else {
-      transaction = await ctx.prisma.record.create({
-        data,
-      })
-    }
+        messageId: ctx.message.message_id,
+        donor: donorArg,
+        hasDonor: !!donor,
+        recipients: {
+          createMany: {
+            data: recipients.map(recipient => ({ memberChatId: recipient.chatId, account: recipient.account }))
+          }
+        },
+        recipientsQuantity: recipients.length,
+        amount: Math.trunc(amount),
+        active: true,
+      }
+    })
   
     const reply = await ctx.reply(transaction.amount.toString(), { reply_to_message_id: ctx.message.message_id })
     await ctx.prisma.record.update({
       where: {
-        id: transaction.id
+        chatId_id: {
+          id: transaction.id,
+          chatId: transaction.chatId,
+        }
       },
       data: {
         replyId: reply.message_id

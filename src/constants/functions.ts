@@ -113,8 +113,13 @@ export const withType: WithType = async ( transaction: RecordWithRecipients | Re
   } else return await getType(transaction)
 }
 
-export const listTransactions = async (ctx: PrismaChatContext, active?: boolean): Promise<RecordWithType[]> => {
+export const listTransactions = async (ctx: PrismaChatContext, from: number | bigint = 1, active?: boolean): Promise<RecordWithType[]> => {
   if (!ctx.chat) return []
+  let take = 10
+  if (from < 1) {
+    take = take - 1 + Number(from)
+    from = 1
+  }
   const transactions = await ctx.prisma.record.findMany({
     select: {
       id: true,
@@ -132,7 +137,15 @@ export const listTransactions = async (ctx: PrismaChatContext, active?: boolean)
         }
       }
     },
-    where: { chatId: ctx.chat.id, active }
+    orderBy: {id: 'asc'},
+    cursor: {
+      chatId_id: {
+        chatId: ctx.chat.id,
+        id: from,
+      }
+    },
+    take,
+    where: { chatId: ctx.chat.id, active },
   })
   return withType(transactions)
 }

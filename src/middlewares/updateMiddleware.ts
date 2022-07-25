@@ -1,4 +1,4 @@
-import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
+import type { MiddlewareFn, NarrowedContext, Context, Types, TelegramError } from 'telegraf'
 import {
   buyRequisites,
   orderRequisites,
@@ -18,36 +18,39 @@ const getExecuteUpdate = (
     amount: number,
   ) => {
     const donorArg = donor ? { connect: { chatId_account: donor } } : {}
-    const recipientsUpdate = recipients.map((recipient) => ({
-      where: {
-        chatId_account_recordId: {
-          chatId: update.chat.id,
-          account: recipient.account,
-          recordId: record.id,
-        }
-      },
-      data: recipient,
-    }))
-    const transaction = await update.prisma.record.update({
+    await update.prisma.record.deleteMany({
       where: {
         id: record.id,
-      },
+        chatId: record.chatId,
+      }
+    })
+    const transaction = await update.prisma.record.create({
       data: {
+        id: record.id,
         chat: {
           connect: { id: update.chat.id }
         },
         messageId: record.messageId,
+        replyId: record.replyId,
         donor: donorArg,
+        hasDonor: !!donor,
         recipients: {
-          update: recipientsUpdate,
+          createMany: {
+            data: recipients.map(recipient => ({ memberChatId: recipient.chatId, account: recipient.account }))
+          }
         },
+        recipientsQuantity: recipients.length,
         amount: Math.trunc(amount),
         active: true,
       }
     })
     const text = transaction.amount.toString()
-    if (('text' in update.editedMessage) && text !== update.editedMessage.text) {
-      update.telegram.editMessageText(update.chat.id, Number(record.replyId), undefined, text)
+    
+    try {
+      await update.telegram.editMessageText(update.chat.id, Number(record.replyId), undefined, text)
+    } catch(e) {
+      const err = e as TelegramError
+      if (err.code !== 400) throw e
     }
   }
 }
@@ -61,8 +64,22 @@ const editedErrorHandling = async (
     await callback()
   } catch (err) {
     if (typeof err === 'string') {
-      if (('text' in update.editedMessage) && err !== update.editedMessage.text) {
-        update.telegram.editMessageText(update.chat.id, reply_message_id, undefined, err)
+      await update.prisma.record.update({
+        where: {
+          chatId_messageId: {
+            chatId: update.chat.id,
+            messageId: update.editedMessage.message_id
+          }
+        },
+        data: {
+          active: false
+        }
+      })
+      try {
+        await update.telegram.editMessageText(update.chat.id, reply_message_id, undefined, err)
+      } catch(e) {
+        const err = e as TelegramError
+        if (err.code !== 400) throw e
       }
     } else throw err
   }
@@ -76,7 +93,7 @@ const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['ed
   
   const record = await update.prisma.record.findUnique({
     where: {
-      messageId_chatId: {
+      chatId_messageId: {
         messageId: id,
         chatId: chat.id,
       }
@@ -123,9 +140,14 @@ const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['ed
       )
       break
     default:
-      const reply_text = 'only transactional commands are supported, previous transaction will be omited'
+      const reply_text = 'Новая команда операции не распознана, операция будет пропущена'
       await update.prisma.record.update({
-        where: { id: record.id },
+        where: {
+          chatId_id: {
+            id: record.id,
+            chatId: record.chatId,
+          }
+        },
         data: { active: false },
       })
       if (reply_text !== update.editedMessage.text) {
