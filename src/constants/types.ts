@@ -1,7 +1,6 @@
 import type { NarrowedContext, Context, Types } from 'telegraf'
 import { escapeChars } from '.'
 import type { MemberWithKind } from './accountKind'
-import type { Record } from '@prisma/client'
 
 export type MemberWithUsername = MemberWithKind & { username: string | undefined, name: string }
 
@@ -43,21 +42,39 @@ export type RecordWithRecipients = {
   recipientsQuantity: number
   amount: number
 }
-export class RecordWithType implements RecordWithRecipients {
+
+export type RecordWithFullRecipients = {
   id: bigint
   active: boolean
-  recipients: {
+  recipients: ({
       account: string
-  }[]
+  } | MemberWithLink)[]
   messageId: bigint
   replyId: bigint | null
   chatId: bigint
   donorAccount: string | null
+  donor: MemberWithLink | undefined
+  hasDonor: boolean
+  recipientsQuantity: number
+  amount: number
+}
+
+export class RecordWithType implements RecordWithRecipients {
+  id: bigint
+  active: boolean
+  recipients: ({
+      account: string
+  } | MemberWithLink)[]
+  messageId: bigint
+  replyId: bigint | null
+  chatId: bigint
+  donorAccount: string | null
+  donor: undefined | MemberWithLink
   hasDonor: boolean
   recipientsQuantity: number
   amount: number
   
-  constructor(record: RecordWithRecipients) {
+  constructor(record: RecordWithFullRecipients) {
     this.id = record.id
     this.active = record.active
     this.recipients = record.recipients
@@ -65,6 +82,7 @@ export class RecordWithType implements RecordWithRecipients {
     this.replyId = record.replyId
     this.chatId = record.chatId
     this.donorAccount = record.donorAccount
+    this.donor = record.donor
     this.hasDonor = record.hasDonor
     this.recipientsQuantity = record.recipientsQuantity
     this.amount = record.amount

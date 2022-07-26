@@ -19,6 +19,14 @@ export const errorHandling = async (
   }
 }
 
+export const editErrorHandling = async (callback: () => void | Promise<void>) => {
+  try {
+    await callback()
+  } catch(e) {
+    const err = e as TelegramError
+    if (err.code !== 400) throw e
+  }
+}
 export const updateKeyboard = async (
   ctx: NarrowedContext<Context, Types.MountMap['callback_query']>,
   text: string,
@@ -27,7 +35,7 @@ export const updateKeyboard = async (
   if(!ctx.callbackQuery.message) return
   const message = ctx.callbackQuery.message
   if ('text' in message && message.text === text && message.reply_markup === markup.reply_markup) return
-  try {
+  editErrorHandling(async () => {
     await ctx.telegram.editMessageText(
       message.chat.id,
       message.message_id,
@@ -35,10 +43,7 @@ export const updateKeyboard = async (
       text,
       { parse_mode: 'MarkdownV2', reply_markup: markup.reply_markup }
     )
-  } catch(e) {
-    const err = e as TelegramError
-    if (err.code !== 400) throw e
-  }
+  })
 }
 
 type MemberOrMembers<T extends MemberWithKind | MemberWithKind[]> = T extends MemberWithKind ? MemberWithLink : MemberWithLink[]
@@ -100,12 +105,25 @@ export const nameMemberCmp = (name: string, member: MemberWithLink) => {
 
 type RecordOrRecords<T extends RecordWithRecipients | RecordWithRecipients[]> = T extends RecordWithRecipients ? RecordWithType : RecordWithType[]
 type WithType = {
-  <T extends RecordWithRecipients | RecordWithRecipients[]>(arg0: T): Promise<RecordOrRecords<T>>
-  (arg0: RecordWithRecipients | RecordWithRecipients[]): Promise<RecordWithType | RecordWithType[]>
+  <T extends RecordWithRecipients | RecordWithRecipients[]>(arg0: PrismaChatContext, arg1: T): Promise<RecordOrRecords<T>>
+  (arg0: PrismaChatContext, arg1: RecordWithRecipients | RecordWithRecipients[]): Promise<RecordWithType | RecordWithType[]>
 }
-export const withType: WithType = async ( transaction: RecordWithRecipients | RecordWithRecipients[] ) => {
+export const withType: WithType = async (ctx: PrismaChatContext, transaction: RecordWithRecipients | RecordWithRecipients[] ) => {
+  const members = await listMembers(ctx)
+  
   const getType = async (transaction: RecordWithRecipients): Promise<RecordWithType> => {
-    return new RecordWithType(transaction)
+    const fullDonor = members.find(member => member.account === transaction.donorAccount)
+    const fullRecipients = transaction.recipients.map(recipient => {
+      const fullRecipient = members.find(member => member.account === recipient.account)
+      if (fullRecipient) return fullRecipient
+        else return recipient
+    })
+    const fullTransaction = {
+      ...transaction,
+      donor: fullDonor,
+      recipients: fullRecipients,
+    }
+    return new RecordWithType(fullTransaction)
   }
   
   if (Array.isArray(transaction)) {
@@ -147,7 +165,13 @@ export const listTransactions = async (ctx: PrismaChatContext, from: number | bi
     take,
     where: { chatId: ctx.chat.id, active },
   })
-  return withType(transactions)
+  return withType(ctx, transactions)
+}
+
+export const commandName = (transaction: RecordWithType) => {
+  const donorName = transaction.donor ? transaction.donor.displayName() + ' ' : ''
+  return `#${transaction.id} ${donorName}/${transaction.getType()} ${Math.trunc(transaction.amount/100)} ` +
+         `${transaction.getType() !== 'pay' ? '/ ' + transaction.recipientsQuantity : ''}`
 }
 
 export const resolveQuery = (members: MemberWithLink[], queryMembers: string[]) => {

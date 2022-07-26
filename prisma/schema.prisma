@@ -20,6 +20,12 @@ enum AccountKind {
   GHOST
 }
 
+enum Page {
+  bl
+  mg
+  hs
+}
+
 model Member {
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   chatId BigInt
@@ -69,5 +75,7 @@ model Chat {
   members Member[]
   records Record[]
   config Config
+  billMessageId BigInt?
+  billPage Page @default(bl)
 }
 //prisma migrate dev --name init

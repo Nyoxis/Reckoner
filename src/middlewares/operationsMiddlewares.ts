@@ -1,10 +1,19 @@
-import config from '../config'
-import { errorHandling, getSimpleMember, listMembers, evaluate, replaceMentions, resolveQuery } from '../constants/functions'
+import {
+  errorHandling,
+  getSimpleMember,
+  listMembers,
+  withType,
+  commandName,
+  evaluate,
+  replaceMentions,
+  resolveQuery,
+} from '../constants/functions'
 import { numericSymbolicFilter } from '../constants'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { Member, Record } from '@prisma/client'
 import type { MemberWithUsername, SpecificContext } from '../constants/types'
+import { billMessageUpdate } from '../constants/billUpdateFunctions'
 
 const getExecuteTransaction = (
   ctx: NarrowedContext<Context, Types.MountMap['text']>,
@@ -37,7 +46,23 @@ const getExecuteTransaction = (
         chatId: ctx.chat.id,
       }
     })
-    const transaction = await ctx.prisma.record.create({
+    const transaction = await withType(ctx, await ctx.prisma.record.create({
+      select: {
+        id: true,
+        messageId: true,
+        replyId: true,
+        chatId: true,
+        donorAccount: true,
+        hasDonor: true,
+        recipientsQuantity: true,
+        amount: true,
+        active: true,
+        recipients: {
+          select: {
+            account: true,
+          }
+        }
+      },
       data: {
         id: recordId,
         chat: {
@@ -55,9 +80,10 @@ const getExecuteTransaction = (
         amount: Math.trunc(amount),
         active: true,
       }
-    })
-  
-    const reply = await ctx.reply(transaction.amount.toString(), { reply_to_message_id: ctx.message.message_id })
+    }))
+    await billMessageUpdate(ctx)
+    
+    const reply = await ctx.reply(commandName(transaction), { reply_to_message_id: ctx.message.message_id })
     await ctx.prisma.record.update({
       where: {
         chatId_id: {

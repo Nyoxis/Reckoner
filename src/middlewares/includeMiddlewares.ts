@@ -6,6 +6,7 @@ import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { MemberWithLink, MemberWithUsername } from '../constants/types'
 import type { Member } from '@prisma/client'
 import { MemberWithKind } from '../constants/accountKind'
+import { billMessageUpdate } from '../constants/billUpdateFunctions'
 
 type NamesOrName<T extends string | string[]> = T extends string ? string | undefined : string[]
 type FilteredNames = {
@@ -59,7 +60,7 @@ const renameMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['te
   
   errorHandling(ctx, async () => {
     let reply: string = ''
-
+    
     if (names.length !== 2) throw 'Введите имя участника и новое имя'
     const oldname = names[0]
     const newname = names[1]
@@ -87,6 +88,7 @@ const renameMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['te
         }
       })))
       ctx.cache.del(ctx.chat.id)
+      await billMessageUpdate(ctx)
 
       reply = reply + `Имя участника *${renaming.linkName()}* заменено на *${renamed.linkName()}*`
     } else reply = reply + 'Имя не изменено'
@@ -122,6 +124,7 @@ const includeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['t
     })
     const includedList = await Promise.all(includedListPromises)
     ctx.cache.del(ctx.chat.id)
+    await billMessageUpdate(ctx)
     
     const m = includedList.length > 1
     reply = includedList.length
@@ -152,6 +155,7 @@ const manageMembersCommand: manageFnType = async (ctx, onCompleteWord, onActive,
   const managedPromise = managing.map(memberUpdate)
   const managed = await Promise.all(managedPromise)
   ctx.cache.del(ctx.chat.id)
+  await billMessageUpdate(ctx)
   
   if (managing.length !== managed.length) throw new Error('error while deleting member')
   const m = managing.length > 1

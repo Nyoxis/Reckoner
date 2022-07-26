@@ -39,6 +39,8 @@ import {
 import {
   undoMiddleware,
   redoMiddleware,
+  omitMiddleware,
+  restoreMiddleware,
 } from './middlewares/undoMiddlewares'
 import updateMiddleware from './middlewares/updateMiddleware'
 
@@ -98,6 +100,8 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   
   bot.command('undo', undoMiddleware)
   bot.command('redo', redoMiddleware)
+  bot.command('omit', omitMiddleware)
+  bot.command('restore', restoreMiddleware)
   
   bot.on('text', (ctx, next) => {
     const text = ctx.message.text

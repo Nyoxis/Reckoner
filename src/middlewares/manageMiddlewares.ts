@@ -1,43 +1,20 @@
 import { Markup } from 'telegraf'
 import { listMembers, updateKeyboard } from '../constants/functions'
+import { listManageKeyboard, billTypeUpdate } from '../constants/billUpdateFunctions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { InlineKeyboardMarkup, InlineKeyboardButton } from 'telegraf/typings/core/types/typegram'
-import type { PrismaChatContext } from '../constants/types'
-
-const listManageKeyboard = async (ctx: PrismaChatContext) => {
-  const members = await listMembers(ctx, undefined)
-  const activeMembers = members.filter(member => member.active)
-  
-  let buttons: InlineKeyboardButton[][] = []
-  if (activeMembers.length !== 0) buttons = [[Markup.button.callback('назад', 'bl')]]
-  
-  buttons = buttons.concat(members.map((member) => {
-    return [
-      Markup.button.callback(`${member.active ? '' : '❆'}${member.displayName()}`, `ac;${member.account}`),
-      Markup.button.callback(member.active ? 'заморозить' : 'разморозить',`fz;${member.account}`),
-    ]
-  }))
-  
-  let text
-  if (members.length !== 0) text = 'Полный список участников'
-  else {
-    text = 'Список участников пуст'
-    buttons = []
-  }
-  text = text + '\n\nЧтобы добавить участника удерживайте\n👉 /include и введите имя'
-  const markup = Markup.inlineKeyboard(buttons)
-  return { text, markup }
-}
 
 const manageMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   const { text, markup } = await listManageKeyboard(ctx)
-  ctx.reply(text, {reply_to_message_id: ctx.message.message_id, reply_markup: markup.reply_markup})
+  const replyMessage = await ctx.reply(text, {reply_to_message_id: ctx.message.message_id, reply_markup: markup.reply_markup})
+  await billTypeUpdate(ctx, 'mg', undefined, replyMessage.message_id)
 }
 
 const memberActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callback_query']>> = async (ctx, next) => {
   if (!ctx.callbackQuery.data) return
   if (!ctx.chat) return
+  if (!ctx.callbackQuery.message) return
   
   const members = await listMembers(ctx, undefined)
   
@@ -99,19 +76,19 @@ const memberActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callb
       
   }
   switch(type) {
-    case 'ac':
-      const acParticipant = ctx.callbackQuery.data.split(';')[1]
-      const acParticipantMember = members.find(member => member.account === acParticipant)
-      const acParticipantLink = acParticipantMember ? acParticipantMember.linkName() : ''
+    case 'dp':
+      const dpParticipant = ctx.callbackQuery.data.split(';')[1]
+      const dpParticipantMember = members.find(member => member.account === dpParticipant)
+      const dpParticipantLink = dpParticipantMember ? dpParticipantMember.linkName() : ''
       
-      if (!acParticipantMember) throw new Error('cannot find member to manage')
+      if (!dpParticipantMember) throw new Error('cannot find member to manage')
       const buttons = [
         [Markup.button.callback('назад', 'mg')],
-        [Markup.button.callback('обнулить', `sz;${acParticipantMember.account}`)],
-        [Markup.button.callback('удалить', `xc;${acParticipantMember.account}`)],
+        [Markup.button.callback('обнулить', `sz;${dpParticipantMember.account}`)],
+        [Markup.button.callback('удалить', `xc;${dpParticipantMember.account}`)],
       ]
       
-      text = `Выберите действие для участника ${acParticipantLink}\n\n` +
+      text = `Выберите действие для участника ${dpParticipantLink}\n\n` +
              `*ВНИМАНИЕ\\! эти действия не могут быть отменены\\!*`
       markup = Markup.inlineKeyboard(buttons)
       break
@@ -120,7 +97,8 @@ const memberActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callb
     case 'fz':
     case 'sz':
     case 'xc':
-      ({ text, markup } = await listManageKeyboard(ctx))
+      await billTypeUpdate(ctx, 'mg', ctx.callbackQuery.message.message_id)
+      ;({ text, markup } = await listManageKeyboard(ctx))
       break
     default: return next()
   }

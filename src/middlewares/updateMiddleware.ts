@@ -8,6 +8,7 @@ import {
 } from './operationsMiddlewares'
 
 import type { Member, Record } from '@prisma/client'
+import { withType, commandName, editErrorHandling } from '../constants/functions'
 const getExecuteUpdate = (
   update: NarrowedContext<Context, Types.MountMap['edited_message']>,
   record: Record,
@@ -17,14 +18,30 @@ const getExecuteUpdate = (
     recipients: Member[],
     amount: number,
   ) => {
-    const donorArg = donor ? { connect: { chatId_account: donor } } : {}
+    const donorArg = donor ? { connect: { chatId_account: {chatId: donor.chatId, account: donor.account } } } : {}
     await update.prisma.record.deleteMany({
       where: {
         id: record.id,
         chatId: record.chatId,
       }
     })
-    const transaction = await update.prisma.record.create({
+    const transaction = await withType(update, await update.prisma.record.create({
+      select: {
+        id: true,
+        messageId: true,
+        replyId: true,
+        chatId: true,
+        donorAccount: true,
+        hasDonor: true,
+        recipientsQuantity: true,
+        amount: true,
+        active: true,
+        recipients: {
+          select: {
+            account: true,
+          }
+        }
+      },
       data: {
         id: record.id,
         chat: {
@@ -43,15 +60,11 @@ const getExecuteUpdate = (
         amount: Math.trunc(amount),
         active: true,
       }
-    })
-    const text = transaction.amount.toString()
-    
-    try {
+    }))
+    const text = commandName(transaction)
+    editErrorHandling(async () => {
       await update.telegram.editMessageText(update.chat.id, Number(record.replyId), undefined, text)
-    } catch(e) {
-      const err = e as TelegramError
-      if (err.code !== 400) throw e
-    }
+    })
   }
 }
 
@@ -75,12 +88,11 @@ const editedErrorHandling = async (
           active: false
         }
       })
-      try {
-        await update.telegram.editMessageText(update.chat.id, reply_message_id, undefined, err)
-      } catch(e) {
-        const err = e as TelegramError
-        if (err.code !== 400) throw e
-      }
+      editErrorHandling(async () => {
+        if (typeof err === 'string') {
+          await update.telegram.editMessageText(update.chat.id, reply_message_id, undefined, err)
+        }
+      })
     } else throw err
   }
 }

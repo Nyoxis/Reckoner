@@ -3,51 +3,20 @@ import { Markup } from 'telegraf'
 import { escapeChars } from '../constants'
 import { listMembers, updateKeyboard } from '../constants/functions'
 import { getBill, getDonorsDebtors } from '../constants/billFunctions'
-import { listManageKeyboard } from './manageMiddlewares'
+import { listKeyboard, billTypeUpdate } from '../constants/billUpdateFunctions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
-import type { PrismaChatContext, MemberWithLink } from '../constants/types'
+import type { MemberWithLink } from '../constants/types'
 import type { InlineKeyboardButton, InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram'
-
-const listKeyboard = async (ctx: PrismaChatContext) => {
-  const members = await getBill(ctx)
-  const totalBalance = members.reduce((total, member) => total + member.totalSum, 0)
-  const unfrozenBalance = members.reduce((unfrozen, member) => member.active ? unfrozen + member.unfrozenSum : unfrozen, 0)
-  
-  const activeMembers = members.filter(member => member.active)
-  const memberButtons = activeMembers.map((member) => {
-    const data = ['op', member.account].join(';')
-    const sum = member.unfrozenSum !== member.totalSum ? member.unfrozenSum : ''
-    return [Markup.button.callback(`${member.displayName()} ${member.totalSum} ${sum}`, data)]
-  })
-  
-  let billText
-  if (activeMembers.length !== 0) {
-    memberButtons.push([Markup.button.callback('/order - заказ на счет или по депозиту', ['ad', '', '/order'].join(';'))])
-    
-    billText = `Список дебетов и долгов_\\(со знаком минус\\)_\n` +
-               `Общий баланс _\\(внешний дебет/долг\\)_: *${escapeChars(totalBalance.toString())}*\n`
-    if (unfrozenBalance !== totalBalance) {
-      billText += `Баланс незамороженных участников: *${escapeChars(unfrozenBalance.toString())}*\n`
-    }
-  } else {
-    return await listManageKeyboard(ctx)
-  }
-  
-  memberButtons.push([Markup.button.callback('править список', 'mg')])
-  memberButtons.push([Markup.button.callback('история операций', 'hs')])
-  
-  return { text: billText, markup: Markup.inlineKeyboard(memberButtons) }
-}
 
 const billMIddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   const { text, markup } = await listKeyboard(ctx)
-  
-  ctx.reply(text, {
+  const replyMessage = await ctx.reply(text, {
     reply_to_message_id: ctx.message.message_id,
     reply_markup: markup.reply_markup,
     parse_mode: 'MarkdownV2'
   })
+  await billTypeUpdate(ctx, 'bl', undefined, replyMessage.message_id)
 }
 
 const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callback_query']>> = async (ctx, next) => {
@@ -58,11 +27,12 @@ const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['call
   const members = await listMembers(ctx)
   let text: string
   let markup: Markup.Markup<InlineKeyboardMarkup>
-
+  
   const type = ctx.callbackQuery.data.split(';')[0]
   switch (type) {
     case 'bl':
       ({ text, markup } = await listKeyboard(ctx))
+      await billTypeUpdate(ctx, 'bl', ctx.callbackQuery.message.message_id)
       break
       
     case 'op':

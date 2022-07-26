@@ -1,4 +1,6 @@
+
 import { listMembers } from './functions'
+
 import type { PrismaChatContext, MemberWithLink } from './types'
 
 const findTransactions = async (ctx: PrismaChatContext, member: MemberWithLink | undefined) => {
@@ -188,3 +190,4 @@ export const getDonorsDebtors = async (ctx: PrismaChatContext, principal: Member
   const donorsDebtors = membersWithDebit.filter(member => member.debit)
   return { principalDebt, principalPart, donorsDebtors }
 }
+
