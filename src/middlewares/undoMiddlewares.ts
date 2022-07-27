@@ -34,11 +34,9 @@ const activateInactivateFunction = async (ctx: PrismaChatContext, id: number | b
     }
   })
   if (!updated) return 'Статус не изменен'
-  await billMessageUpdate(ctx)
+  
   const updatedRecord = await withType(ctx, updated)
-  
   const replyText = (activate ? 'Операция восстановлена' : 'Операция пропущена') + '\n' + commandName(updatedRecord)
-  
   editErrorHandling(async () => {
     if (ctx.chat && updatedRecord.replyId) {
       await ctx.telegram.editMessageText(ctx.chat.id, Number(updatedRecord.replyId), undefined, replyText)
@@ -67,6 +65,7 @@ const undoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
     if (!latestRecord) throw 'Больше нет активных операций'
     
     const replyText = await activateInactivateFunction(ctx, latestRecord.id, false)
+    await billMessageUpdate(ctx)
     ctx.reply(replyText, { reply_to_message_id: ctx.message.message_id })
   })
 }
@@ -90,6 +89,7 @@ const redoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
     if (!latestRecord) throw 'Больше нет пропущенных операций'
     
     const replyText = await activateInactivateFunction(ctx, latestRecord.id, true)
+    await billMessageUpdate(ctx)
     ctx.reply(replyText, { reply_to_message_id: ctx.message.message_id })
   })
 }
@@ -109,6 +109,7 @@ const omitRestoreOperation = async (ctx: PrismaChatContext, activate: boolean) =
   })
   const done = await Promise.all(donePromise)
   const success = done.filter(result => result !== 'Статус не изменен')
+  await billMessageUpdate(ctx)
   return success.length
 }
 

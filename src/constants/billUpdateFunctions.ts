@@ -7,7 +7,7 @@ import type { PrismaChatContext, RecordWithType } from './types'
 import type { InlineKeyboardButton, InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram'
 import type { Page } from '@prisma/client'
 
-export const listKeyboard = async (ctx: PrismaChatContext) => {
+export const listBillKeyboard = async (ctx: PrismaChatContext, pinRemind: boolean = false) => {
   const members = await getBill(ctx)
   const totalBalance = members.reduce((total, member) => total + member.totalSum, 0)
   const unfrozenBalance = members.reduce((unfrozen, member) => member.active ? unfrozen + member.unfrozenSum : unfrozen, 0)
@@ -19,11 +19,13 @@ export const listKeyboard = async (ctx: PrismaChatContext) => {
     return [Markup.button.callback(`${member.displayName()} ${member.totalSum} ${sum}`, data)]
   })
   
-  let billText
+  let billText = ''
   if (activeMembers.length !== 0) {
     memberButtons.push([Markup.button.callback('/order - заказ на счет или по депозиту', ['ad', '', '/order'].join(';'))])
     
-    billText = `Список дебетов и долгов_\\(со знаком минус\\)_\n` +
+    const pinned = await checkPinned(ctx)
+    if (!pinned && !pinRemind) billText += 'Это сообщение будет обновляться, вы можете его закрепить\n\n'
+    billText += `Список дебетов и долгов_\\(со знаком минус\\)_\n` +
                `Общий баланс _\\(внешний дебет/долг\\)_: *${escapeChars(totalBalance.toString())}*\n`
     if (unfrozenBalance !== totalBalance) {
       billText += `Баланс незамороженных участников: *${escapeChars(unfrozenBalance.toString())}*\n`
@@ -61,42 +63,6 @@ export const listManageKeyboard = async (ctx: PrismaChatContext) => {
   text = text + '\n\nЧтобы добавить участника удерживайте\n👉 /include и введите имя'
   const markup = Markup.inlineKeyboard(buttons)
   return { text, markup }
-}
-
-export const billMessageUpdate = async (ctx: PrismaChatContext) => {
-  if (!ctx.chat) return
-  const chat = await ctx.prisma.chat.findUnique({
-    where: {
-      id: ctx.chat.id
-    }
-  })
-  if (!chat) return
-
-  let text: string
-  let markup: Markup.Markup<InlineKeyboardMarkup>
-  switch (chat.billPage) {
-    case 'hs':
-      ({ text, markup } = await listHistoryKeyboard(ctx))
-      break
-      
-    case 'mg':
-      ({ text, markup } = await listManageKeyboard(ctx))
-      break
-      
-    case 'bl':
-    default:
-      ({ text, markup } = await listKeyboard(ctx))
-      break
-  }
-  editErrorHandling(async () => {
-    await ctx.telegram.editMessageText(
-      ctx.chat?.id,
-      Number(chat.billMessageId),
-      undefined,
-      text,
-      {reply_markup: markup.reply_markup, parse_mode: 'MarkdownV2'},
-    )
-  })
 }
 
 const recalculateAmount = (transaction: RecordWithType) => {
@@ -176,8 +142,67 @@ export const listHistoryKeyboard = async (ctx: PrismaChatContext, from?: number 
   return { text, markup}
 }
 
+export const billMessageUpdate = async (ctx: PrismaChatContext, old?: boolean) => {
+  if (!ctx.chat) return
+  const chat = await ctx.prisma.chat.findUnique({
+    where: {
+      id: ctx.chat.id
+    }
+  })
+  if (!chat) return
+  if (!chat.billMessageId) return
+  
+  let text: string
+  let markup: Markup.Markup<InlineKeyboardMarkup>
+  switch (chat.billPage) {
+    case 'hs':
+      ({ text, markup } = await listHistoryKeyboard(ctx))
+      break
+      
+    case 'mg':
+      ({ text, markup } = await listManageKeyboard(ctx))
+      break
+      
+    case 'bl':
+    default:
+      ({ text, markup } = await listBillKeyboard(ctx, old))
+      break
+  }
+  editErrorHandling(async () => {
+    await ctx.telegram.editMessageText(
+      ctx.chat?.id,
+      Number(chat.billMessageId),
+      undefined,
+      text,
+      {reply_markup: markup.reply_markup, parse_mode: 'MarkdownV2'},
+    )
+  })
+}
+
+const checkPinned = async (ctx: PrismaChatContext) => {
+  if (!ctx.chat) return false
+  const chat = await ctx.telegram.getChat(ctx.chat.id)
+  if (chat.pinned_message) {
+    const prismaChat = await ctx.prisma.chat.findUnique({
+      where: {
+        id: chat.id 
+      }
+    })
+    if (Number(prismaChat?.billMessageId) === chat.pinned_message.message_id) return true
+  }
+  return false
+}
+
 export const billTypeUpdate = async (ctx: PrismaChatContext, type: Page, checkMessageId?: number, billMessageId?: number) => {
   if (!ctx.chat) return
+  if (billMessageId) {
+    const pinned = await checkPinned(ctx)
+    console.log(pinned)
+    if (pinned) return
+    await billMessageUpdate(ctx, true)
+  }
+  
+  if (!checkMessageId && !billMessageId) return
   await ctx.prisma.chat.updateMany({
     where: {
       id: ctx.chat.id,

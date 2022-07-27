@@ -27,7 +27,9 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
           
           await ctx.telegram.sendMessage(
             ctx.message.from.id,
-            `hello you have started this bot in group ${thisChat.title}`
+            `Привет, вы запустили этого бота в группе: ${thisChat.title}\n` +
+            `Команды здесь будут отражены на участниках группы\n` +
+            `Чтобы использовать бота в частном режиме используйте команду /start`
           ).catch((err: TelegramError) => {
             if (err.response.error_code === 403) {
               throw 'bot is blocked by sender'
@@ -43,6 +45,14 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
         chat?.config === 'PRIVATE'
           ? replyMessages.push(`yes it is private`) 
           : replyMessages.push('some error occured')
+        ctx.prisma.chat.upsert({
+          where: { id: ctx.message.from.id },
+          update: { groupChatId: ctx.chat.id },
+          create: {
+            id: ctx.message.from.id,
+            groupChatId: ctx.chat.id,
+          },
+        })
         ctx.telegram.deleteMyCommands({
           scope: {
             type: 'chat',
@@ -56,7 +66,7 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
       case undefined:
         chat = await ctx.prisma.chat.upsert({
           where: { id: ctx.chat.id },
-          update: { config: 'PUBLIC' },
+          update: { config: 'PUBLIC', groupChatId: null },
           create: { id: ctx.chat.id, config: 'PUBLIC' }
         })
         chat?.config === 'PUBLIC'

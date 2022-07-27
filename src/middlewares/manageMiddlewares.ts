@@ -105,5 +105,5 @@ const memberActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callb
   updateKeyboard(ctx, text, markup)
 }
 
-export { memberActions, listManageKeyboard }
+export { memberActions }
 export default manageMiddleware

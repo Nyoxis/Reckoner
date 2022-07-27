@@ -74,8 +74,10 @@ model Chat {
   id BigInt @id @unique
   members Member[]
   records Record[]
-  config Config
+  config Config?
+  groupChatId BigInt?
   billMessageId BigInt?
   billPage Page @default(bl)
+  countMessageId BigInt?
 }
 //prisma migrate dev --name init

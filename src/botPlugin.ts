@@ -66,8 +66,21 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   })
   
   bot.on('text', checkMiddleware)
-  bot.on('callback_query', (ctx, next) => {
+  bot.on('callback_query', async (ctx, next) => {
     sneakyAddId(ctx, ctx.callbackQuery.from)
+    if (!ctx.chat) return
+    const chat = await ctx.prisma.chat.findUnique({
+      where: {
+        id: ctx.chat.id
+      }
+    })
+    if (chat?.config === 'PRIVATE') {
+      const admins = await ctx.getChatAdministrators()
+
+      if (!admins.find(admin => admin.user.id === ctx.callbackQuery.from.id)) {
+        return
+      }
+    }
     next()
   })
   bot.on('inline_query', (ctx, next) => {

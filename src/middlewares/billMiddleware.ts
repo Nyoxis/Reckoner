@@ -3,14 +3,14 @@ import { Markup } from 'telegraf'
 import { escapeChars } from '../constants'
 import { listMembers, updateKeyboard } from '../constants/functions'
 import { getBill, getDonorsDebtors } from '../constants/billFunctions'
-import { listKeyboard, billTypeUpdate } from '../constants/billUpdateFunctions'
+import { listBillKeyboard, billTypeUpdate } from '../constants/billUpdateFunctions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { MemberWithLink } from '../constants/types'
 import type { InlineKeyboardButton, InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram'
 
 const billMIddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
-  const { text, markup } = await listKeyboard(ctx)
+  const { text, markup } = await listBillKeyboard(ctx)
   const replyMessage = await ctx.reply(text, {
     reply_to_message_id: ctx.message.message_id,
     reply_markup: markup.reply_markup,
@@ -31,7 +31,7 @@ const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['call
   const type = ctx.callbackQuery.data.split(';')[0]
   switch (type) {
     case 'bl':
-      ({ text, markup } = await listKeyboard(ctx))
+      ({ text, markup } = await listBillKeyboard(ctx))
       await billTypeUpdate(ctx, 'bl', ctx.callbackQuery.message.message_id)
       break
       

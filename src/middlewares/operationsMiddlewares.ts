@@ -23,6 +23,13 @@ const getExecuteTransaction = (
     recipients: Member[],
     amount: number,
   ) => {
+    const chat = await ctx.prisma.chat.findUnique({
+      where: {
+        id: ctx.chat.id
+      }
+    })
+    if (!chat) throw 'Бот не запущен'
+    const chatId = chat.groupChatId ? chat.groupChatId : chat.id
     const lastActive = await ctx.prisma.record.findFirst({
       select: {
         id: true,
@@ -32,7 +39,7 @@ const getExecuteTransaction = (
         id: 'desc'
       },
       where: {
-        chatId: ctx.chat.id,
+        chatId,
         active: true,
       },
     })
@@ -66,7 +73,7 @@ const getExecuteTransaction = (
       data: {
         id: recordId,
         chat: {
-          connect: { id: ctx.chat.id }
+          connect: { id: chatId }
         },
         messageId: ctx.message.message_id,
         donor: donorArg,
