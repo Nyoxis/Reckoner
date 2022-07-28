@@ -1,6 +1,6 @@
 
 import { numericFilter, usernameFilter, alphabeticalFilter, escapeChars } from '../constants'
-import { errorHandling, listMembers, replaceMentions, truncId, nameMemberCmp, resolveQuery, withLink } from '../constants/functions'
+import { errorHandling, findChat, listMembers, replaceMentions, truncId, nameMemberCmp, resolveQuery, withLink } from '../constants/functions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { MemberWithLink, MemberWithUsername } from '../constants/types'
@@ -71,7 +71,7 @@ const renameMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['te
     
     const { filteredNames, missingText } = await filterInputNames(ctx, newname)
     reply = reply + missingText
-
+    
     let renamed: MemberWithLink
     if (filteredNames) {
       const account = truncId(filteredNames)
@@ -83,11 +83,11 @@ const renameMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['te
           }
         },
         data: {
-          chat: { connect: { id: ctx.chat.id }},
+          chat: { connect: { id: renaming.chatId }},
           account,
         }
       })))
-      ctx.cache.del(ctx.chat.id)
+      ctx.cache.del(Number(renaming.chatId))
       await billMessageUpdate(ctx)
 
       reply = reply + `Имя участника *${renaming.linkName()}* заменено на *${renamed.linkName()}*`
@@ -106,6 +106,8 @@ const includeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['t
   errorHandling(ctx, async () => {
     let reply: string = ''
     
+    const chatId = await findChat(ctx)
+
     const { filteredNames, missingText } = await filterInputNames(ctx, names)
     reply = reply + missingText
     
@@ -113,9 +115,11 @@ const includeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['t
       const account = truncId(name)
       let member: MemberWithKind
       
+
+      
       member = ctx.prisma.withKind(await ctx.prisma.member.create({
         data: {
-          chat: { connect: { id: ctx.chat.id }},
+          chat: { connect: { id: chatId }},
           account,
         }
       }))
@@ -123,7 +127,7 @@ const includeMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['t
       return await withLink(ctx, member)
     })
     const includedList = await Promise.all(includedListPromises)
-    ctx.cache.del(ctx.chat.id)
+    ctx.cache.del(Number(chatId))
     await billMessageUpdate(ctx)
     
     const m = includedList.length > 1
@@ -154,7 +158,7 @@ const manageMembersCommand: manageFnType = async (ctx, onCompleteWord, onActive,
   const managing = resolveQuery(members, names)
   const managedPromise = managing.map(memberUpdate)
   const managed = await Promise.all(managedPromise)
-  ctx.cache.del(ctx.chat.id)
+  if (managed.length) ctx.cache.del(Number(managed[0].chatId))
   await billMessageUpdate(ctx)
   
   if (managing.length !== managed.length) throw new Error('error while deleting member')

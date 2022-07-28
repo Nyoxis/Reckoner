@@ -8,7 +8,7 @@ import {
 } from './operationsMiddlewares'
 
 import type { Member, Record } from '@prisma/client'
-import { withType, commandName, editErrorHandling } from '../constants/functions'
+import { findChat, withType, commandName, editErrorHandling } from '../constants/functions'
 const getExecuteUpdate = (
   update: NarrowedContext<Context, Types.MountMap['edited_message']>,
   record: Record,
@@ -45,7 +45,7 @@ const getExecuteUpdate = (
       data: {
         id: record.id,
         chat: {
-          connect: { id: update.chat.id }
+          connect: { id: record.chatId }
         },
         messageId: record.messageId,
         replyId: record.replyId,
@@ -77,10 +77,11 @@ const editedErrorHandling = async (
     await callback()
   } catch (err) {
     if (typeof err === 'string') {
+      const chatId = await findChat(update)
       await update.prisma.record.update({
         where: {
           chatId_messageId: {
-            chatId: update.chat.id,
+            chatId,
             messageId: update.editedMessage.message_id
           }
         },
@@ -101,13 +102,13 @@ const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['ed
   if (!('text' in update.editedMessage)) return next()
   
   const id = update.editedMessage.message_id
-  const chat = update.editedMessage.chat
+  const chatId = await findChat(update)
   
   const record = await update.prisma.record.findUnique({
     where: {
       chatId_messageId: {
         messageId: id,
-        chatId: chat.id,
+        chatId,
       }
     }
   })

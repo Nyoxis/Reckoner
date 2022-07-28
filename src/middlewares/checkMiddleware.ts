@@ -15,12 +15,12 @@ const checkMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
   })
   
   if (!chat) {
-    return ctx.reply('use /start to initialize this bot')
-  } else if (chat?.config === 'PRIVATE') {
+    return ctx.reply('Чтобы начать напишите /start')
+  } else if (chat?.config === 'PROTECTED') {
     const admins = await ctx.getChatAdministrators()
     
     if (!admins.find(admin => admin.user.id === ctx.message.from.id)) {
-      return ctx.reply('only administrator can use this bot')
+      return ctx.reply('Только администраторы могут использовать этот бот')
     }
   }
   

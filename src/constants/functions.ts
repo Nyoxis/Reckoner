@@ -79,18 +79,32 @@ export const getSimpleMember = (member: MemberWithUsername | undefined) => {
   return member ? { account: member.account, chatId: member.chatId, active: member.active } : undefined
 }
 
+export const findChat = async (ctx: PrismaChatContext) => {
+  if (!ctx.chat) throw 'Нет данных о чате' 
+  const chat = await ctx.prisma.chat.findUnique({
+    where: {
+      id: ctx.chat.id
+    }
+  })
+  if (!chat) return ctx.chat.id
+  return chat.groupChatId ? chat.groupChatId : chat.id
+}
+
 export const listMembers = async (ctx: PrismaChatContext, active?: boolean): Promise<MemberWithLink[]> => {
   if (!ctx.chat) return []
-  const cachedMembers: MemberWithLink[] | undefined = ctx.cache.get(ctx.chat.id)
+
+  const chatId = await findChat(ctx)
+
+  const cachedMembers: MemberWithLink[] | undefined = ctx.cache.get(Number(chatId))
   if (cachedMembers) return cachedMembers
   
   const members = ctx.prisma.withKind(
     await ctx.prisma.member.findMany({
-      where: { chatId: ctx.chat.id, active }
+      where: { chatId, active }
     })
   )
   const membersWithLink = await withLink(ctx, members)
-  ctx.cache.set(ctx.chat.id, membersWithLink)
+  ctx.cache.set(Number(chatId), membersWithLink)
   
   return membersWithLink
 }
@@ -138,6 +152,7 @@ export const listTransactions = async (ctx: PrismaChatContext, from: number | bi
     take = take - 1 + Number(from)
     from = 1
   }
+  const chatId = await findChat(ctx)
   const transactions = await ctx.prisma.record.findMany({
     select: {
       id: true,
@@ -158,12 +173,12 @@ export const listTransactions = async (ctx: PrismaChatContext, from: number | bi
     orderBy: {id: 'asc'},
     cursor: {
       chatId_id: {
-        chatId: ctx.chat.id,
+        chatId,
         id: from,
       }
     },
     take,
-    where: { chatId: ctx.chat.id, active },
+    where: { chatId, active },
   })
   return withType(ctx, transactions)
 }

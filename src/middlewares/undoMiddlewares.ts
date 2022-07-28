@@ -1,4 +1,4 @@
-import { withType, commandName, errorHandling, listTransactions, editErrorHandling } from '../constants/functions'
+import { withType, commandName, errorHandling, findChat, editErrorHandling } from '../constants/functions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import { PrismaChatContext, RecordWithType } from '../constants/types'
@@ -6,6 +6,9 @@ import { billMessageUpdate } from '../constants/billUpdateFunctions'
 
 const activateInactivateFunction = async (ctx: PrismaChatContext, id: number | bigint, activate: boolean) => {
   if (!ctx.chat) throw new Error('Context has no chat object')
+  
+  const chatId = await findChat(ctx)
+  
   const updated = await ctx.prisma.record.update({
     select: {
       id: true,
@@ -26,7 +29,7 @@ const activateInactivateFunction = async (ctx: PrismaChatContext, id: number | b
     where: {
       chatId_id: {
         id: id,
-        chatId: ctx.chat.id,
+        chatId,
       }
     },
     data: {
@@ -48,6 +51,8 @@ const activateInactivateFunction = async (ctx: PrismaChatContext, id: number | b
 
 const undoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, async () => {
+    const chatId = await findChat(ctx)
+    
     const latestRecord = await ctx.prisma.record.findFirst({
       select: {
         id: true,
@@ -57,7 +62,7 @@ const undoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
         id: 'desc'
       },
       where: {
-        chatId: ctx.chat.id,
+        chatId,
         active: true,
       }
     })
@@ -72,6 +77,8 @@ const undoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
 
 const redoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, async () => {
+    const chatId = await findChat(ctx)
+
     const latestRecord = await ctx.prisma.record.findFirst({
       select: {
         id: true,
@@ -81,7 +88,7 @@ const redoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
         id: 'asc'
       },
       where: {
-        chatId: ctx.chat.id,
+        chatId,
         active: false,
       }
     })

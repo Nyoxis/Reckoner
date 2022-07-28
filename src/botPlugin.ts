@@ -3,7 +3,7 @@ import { Telegraf, Markup } from 'telegraf'
 
 import config from './config'
 import checkMiddleware from './middlewares/checkMiddleware'
-import { sneakyAddId } from './constants/functions'
+import { sneakyAddId, findChat } from './constants/functions'
 import startMiddleware from './middlewares/startMiddleware'
 
 import {
@@ -69,12 +69,13 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   bot.on('callback_query', async (ctx, next) => {
     sneakyAddId(ctx, ctx.callbackQuery.from)
     if (!ctx.chat) return
+    const chatId = await findChat(ctx)
     const chat = await ctx.prisma.chat.findUnique({
       where: {
-        id: ctx.chat.id
+        id: chatId
       }
     })
-    if (chat?.config === 'PRIVATE') {
+    if (chat?.config === 'PROTECTED') {
       const admins = await ctx.getChatAdministrators()
 
       if (!admins.find(admin => admin.user.id === ctx.callbackQuery.from.id)) {

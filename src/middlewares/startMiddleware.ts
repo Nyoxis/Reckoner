@@ -9,48 +9,60 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
     let replyMessages: String[] = []
     let config = ctx.message.text.split(' ')[1]
     
-    if (ctx.chat.type === 'private' && config === 'private') {
-      replyMessages.push('only public mode in privat chat')
+    if (ctx.chat.type === 'private' && config === 'protected') {
+      replyMessages.push('Защищенный режим бота недоступен в личной переписке')
       config = 'public'
     }
     
     let chat: Chat
     switch (config) {
-      case 'private':
+      case 'protected':
         const thisChat = await ctx.getChat()
         
         if (thisChat.type !== 'private') {
           const admins = await ctx.getChatAdministrators()
           if (!admins.find(admin => admin.user.id === ctx.message.from.id)) {
-            throw 'Only admin can initialize this bot in private mode'
+            throw 'Только администратор группы может запустить бота в приватном режиме'
           }
           
           await ctx.telegram.sendMessage(
             ctx.message.from.id,
             `Привет, вы запустили этого бота в группе: ${thisChat.title}\n` +
             `Команды здесь будут отражены на участниках группы\n` +
-            `Чтобы использовать бота в частном режиме используйте команду /start`
+            `Чтобы использовать бота в частном режиме используйте команду /start\n\n` +
+            `Удерживайте /include и введите участников через пробел\n` +
+            `Используйте /bill чтобы показать список дебета, долга`
           ).catch((err: TelegramError) => {
             if (err.response.error_code === 403) {
-              throw 'bot is blocked by sender'
+              throw 'Бот заблокирован пользователем, использование в приватном режиме невозможно'
             } else throw err
           })
         }
         
         chat = await ctx.prisma.chat.upsert({
           where: { id: ctx.chat.id },
-          update: { config: 'PRIVATE' },
-          create: { id: ctx.chat.id, config: 'PRIVATE' }
+          update: { config: 'PROTECTED' },
+          create: { id: ctx.chat.id, config: 'PROTECTED' }
         })
-        chat?.config === 'PRIVATE'
-          ? replyMessages.push(`yes it is private`) 
-          : replyMessages.push('some error occured')
-        ctx.prisma.chat.upsert({
+        chat?.config === 'PROTECTED'
+          ? replyMessages.push(`Бот запущен в защищенном режиме, только администраторы могут вносить изменения`) 
+          : replyMessages.push('Не удалось запустить бота. База данных недоступна')
+        await ctx.prisma.chat.upsert({
           where: { id: ctx.message.from.id },
-          update: { groupChatId: ctx.chat.id },
+          update: {
+            groupChat: {
+              connect: {
+                id: ctx.chat.id
+              }
+            } 
+          },
           create: {
             id: ctx.message.from.id,
-            groupChatId: ctx.chat.id,
+            groupChat: {
+              connect: {
+                id: ctx.chat.id
+              }
+            },
           },
         })
         ctx.telegram.deleteMyCommands({
@@ -70,8 +82,17 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
           create: { id: ctx.chat.id, config: 'PUBLIC' }
         })
         chat?.config === 'PUBLIC'
-          ? replyMessages.push('now public')
-          : replyMessages.push('some error occured')
+          ? ctx.chat.type !== 'private'
+            ? replyMessages.push(
+              'Бот запущен в публичном режиме, все участники группы могут вносить изменения\n' +
+              'Удерживайте /include и введите участников через пробел\n' +
+              'Используйте /bill чтобы показать список дебета, долга'
+            )
+            : replyMessages.push(
+              'Бот запущен\nУдерживайте /include и введите участников через пробел\n' +
+              'Используйте /bill чтобы показать список дебета, долга'
+            )
+          : replyMessages.push('Не удалось запустить бота. База данных недоступна')
         break
       
       default:

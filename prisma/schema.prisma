@@ -12,7 +12,7 @@ datasource db {
 
 enum Config {
   PUBLIC
-  PRIVATE
+  PROTECTED
 }
 
 enum AccountKind {
@@ -75,7 +75,9 @@ model Chat {
   members Member[]
   records Record[]
   config Config?
-  groupChatId BigInt?
+  groupChat Chat? @relation("groupPrivate", fields: [groupChatId], references: [id], onDelete: SetNull)
+  groupChatId BigInt? @unique
+  privateChat Chat? @relation("groupPrivate")
   billMessageId BigInt?
   billPage Page @default(bl)
   countMessageId BigInt?

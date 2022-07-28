@@ -7,6 +7,7 @@ import {
   evaluate,
   replaceMentions,
   resolveQuery,
+  findChat,
 } from '../constants/functions'
 import { numericSymbolicFilter } from '../constants'
 
@@ -23,13 +24,7 @@ const getExecuteTransaction = (
     recipients: Member[],
     amount: number,
   ) => {
-    const chat = await ctx.prisma.chat.findUnique({
-      where: {
-        id: ctx.chat.id
-      }
-    })
-    if (!chat) throw 'Бот не запущен'
-    const chatId = chat.groupChatId ? chat.groupChatId : chat.id
+    const chatId = await findChat(ctx)
     const lastActive = await ctx.prisma.record.findFirst({
       select: {
         id: true,

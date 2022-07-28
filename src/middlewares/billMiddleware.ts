@@ -10,7 +10,7 @@ import type { MemberWithLink } from '../constants/types'
 import type { InlineKeyboardButton, InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram'
 
 const billMIddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
-  const { text, markup } = await listBillKeyboard(ctx)
+  const { text, markup } = await listBillKeyboard(ctx, true)
   const replyMessage = await ctx.reply(text, {
     reply_to_message_id: ctx.message.message_id,
     reply_markup: markup.reply_markup,
