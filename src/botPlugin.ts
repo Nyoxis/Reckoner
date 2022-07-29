@@ -8,8 +8,12 @@ import startMiddleware from './middlewares/startMiddleware'
 
 import {
   default as billMIddleware,
-  composeCommand,
+  billActions,
 } from './middlewares/billMiddleware'
+import {
+  default as countMiddleware,
+  countActions,
+} from './middlewares/countMiddleware'
 
 import {
   default as manageMiddleware,
@@ -75,9 +79,11 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
         id: chatId
       }
     })
-    if (chat?.config === 'PROTECTED') {
+    if (!ctx.callbackQuery.data) return
+    const type = ctx.callbackQuery.data.split(';')[0]
+    if (chat?.config === 'PROTECTED' && ctx.chat.type !== 'private' && !(type === 'ct' || type === 'pd')) {
       const admins = await ctx.getChatAdministrators()
-
+      
       if (!admins.find(admin => admin.user.id === ctx.callbackQuery.from.id)) {
         return
       }
@@ -92,8 +98,11 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   bot.start(startMiddleware)
 
   bot.command('bill', billMIddleware)
-  bot.on('callback_query', composeCommand)
+  bot.on('callback_query', billActions)
   bot.on('inline_query', rectifyCommand)
+  
+  bot.command('count', countMiddleware)
+  bot.on('callback_query', countActions)
   
   bot.command('manage', manageMiddleware)
   bot.on('callback_query', memberActions)
@@ -141,9 +150,8 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
     next()
   })
   bot.command('stop', async (ctx) => {
-    const deleted = await fastify.prisma.chat.deleteMany({ where: { id: ctx.chat.id } })
+    await fastify.prisma.chat.deleteMany({ where: { id: ctx.chat.id } })
     ctx.cache.del(ctx.chat.id)
-    ctx.reply(JSON.stringify(deleted), { reply_to_message_id: ctx.message.message_id })
   })
   /*
   const SECRET_PATH = `/telegraf/${bot.secretPathComponent()}`

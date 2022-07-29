@@ -40,12 +40,11 @@ model Member {
 
 model RecordOfRecipient {
   member Member @relation(fields: [memberChatId, account], references: [chatId, account], onDelete: Cascade)
-  memberChatId BigInt // relation scalar field (used in the `@relation` attribute above)
+  memberChatId BigInt
   account String
   record Record @relation(fields: [recordId, chatId], references: [chatId, id], onDelete: Cascade)
   recordId BigInt
   chatId BigInt
-  // relation scalar field (used in the `@relation` attribute above)
   
   @@id([chatId, account, recordId])
 }
@@ -82,4 +81,3 @@ model Chat {
   billPage Page @default(bl)
   countMessageId BigInt?
 }
-//prisma migrate dev --name init

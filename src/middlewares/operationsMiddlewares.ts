@@ -45,7 +45,7 @@ const getExecuteTransaction = (
     await ctx.prisma.record.deleteMany({
       where: {
         id: recordId,
-        chatId: ctx.chat.id,
+        chatId,
       }
     })
     const transaction = await withType(ctx, await ctx.prisma.record.create({
@@ -144,7 +144,6 @@ const transactionCommand = async (
       if (!donor) throw 'Принципал не найден'
     }
     parameters = parameters.slice(1)
-    //only numbers, operands and closed brackets
     
     let numeric: number | undefined
     let addresseeNames: string[] = []

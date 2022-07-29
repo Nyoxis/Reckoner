@@ -1,15 +1,16 @@
 
-import { listMembers } from './functions'
+import { listMembers, findChat } from './functions'
 
-import type { PrismaChatContext, MemberWithLink } from './types'
+import type { PrismaChatContext, MemberWithLink, MemberWithSum } from './types'
 
 const findTransactions = async (ctx: PrismaChatContext, member: MemberWithLink | undefined) => {
+  const chatId = await findChat(ctx)
   const whereDonor = member ? {
-    chatId: member.chatId,
+    chatId,
     donorAccount: member.account,
     active: true,
   } : {
-    chatId: ctx.chat?.id,
+    chatId,
     hasDonor: false,
     active: true,
   }
@@ -32,11 +33,11 @@ const findTransactions = async (ctx: PrismaChatContext, member: MemberWithLink |
   })
 
   const whereRecipients = member ? {
-      chatId: member.chatId,
+      chatId,
       recipients: { some: { account: member.account} },
       active: true,
     } : {
-      chatId: ctx.chat?.id,
+      chatId,
       recipientsQuantity: 0,
       active: true,
     }
@@ -65,7 +66,7 @@ const findTransactions = async (ctx: PrismaChatContext, member: MemberWithLink |
   return await Promise.all([donorInPromise, recipientInPromise])
 }
 
-export const getBill = async (ctx: PrismaChatContext) => {
+export const getBill = async (ctx: PrismaChatContext): Promise<MemberWithSum[]> => {
   const membersWithName = await listMembers(ctx, undefined)
   
   const promisesWithSum = membersWithName.map(async (member) => {

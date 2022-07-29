@@ -28,6 +28,12 @@ export class MemberWithLink implements MemberWithUsername {
     return `${this.username ? '@' + escapeChars(this.username) : this.getKind() === 'USER' ? userLink : escapeChars(this.account)}`
   }
 }
+
+export type MemberWithSum = MemberWithLink & {
+  totalSum: number,
+  unfrozenSum: number,
+}
+
 export type RecordWithRecipients = {
   id: bigint
   active: boolean

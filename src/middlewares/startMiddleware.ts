@@ -1,8 +1,9 @@
 import { errorHandling } from '../constants/functions'
 
-import type { TelegramError } from 'telegraf'
+import { Markup, TelegramError } from 'telegraf'
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { Chat } from '@prisma/client'
+import { ReplyKeyboardMarkup, ReplyKeyboardRemove } from 'telegraf/typings/core/types/typegram'
 
 const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   errorHandling(ctx, async () => {
@@ -13,6 +14,13 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
       replyMessages.push('Защищенный режим бота недоступен в личной переписке')
       config = 'public'
     }
+    
+    const buttons = [[
+      Markup.button.text('/bill'),
+      Markup.button.text('/undo'),
+      Markup.button.text('/redo'),
+    ]]
+    let markup: Markup.Markup<ReplyKeyboardMarkup | ReplyKeyboardRemove> = Markup.keyboard(buttons).resize(true)
     
     let chat: Chat
     switch (config) {
@@ -31,7 +39,8 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
             `Команды здесь будут отражены на участниках группы\n` +
             `Чтобы использовать бота в частном режиме используйте команду /start\n\n` +
             `Удерживайте /include и введите участников через пробел\n` +
-            `Используйте /bill чтобы показать список дебета, долга`
+            `Используйте /bill чтобы показать список дебета, долга`,
+            { reply_markup: markup.reply_markup },
           ).catch((err: TelegramError) => {
             if (err.response.error_code === 403) {
               throw 'Бот заблокирован пользователем, использование в приватном режиме невозможно'
@@ -47,6 +56,7 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
         chat?.config === 'PROTECTED'
           ? replyMessages.push(`Бот запущен в защищенном режиме, только администраторы могут вносить изменения`) 
           : replyMessages.push('Не удалось запустить бота. База данных недоступна')
+        markup = Markup.removeKeyboard()
         await ctx.prisma.chat.upsert({
           where: { id: ctx.message.from.id },
           update: {
@@ -54,7 +64,7 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
               connect: {
                 id: ctx.chat.id
               }
-            } 
+            }
           },
           create: {
             id: ctx.message.from.id,
@@ -78,7 +88,7 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
       case undefined:
         chat = await ctx.prisma.chat.upsert({
           where: { id: ctx.chat.id },
-          update: { config: 'PUBLIC', groupChatId: null },
+          update: { config: 'PUBLIC', groupChat: { disconnect: true }, privateChat: { disconnect: true }},
           create: { id: ctx.chat.id, config: 'PUBLIC' }
         })
         chat?.config === 'PUBLIC'
@@ -99,7 +109,7 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
         replyMessages.push('unknow config')
     }
     
-    ctx.reply(replyMessages.join('\n'), { reply_to_message_id: ctx.message?.message_id })
+    ctx.reply(replyMessages.join('\n'), {reply_markup: markup.reply_markup, reply_to_message_id: ctx.message?.message_id })
   })
 }
 

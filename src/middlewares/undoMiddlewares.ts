@@ -102,12 +102,13 @@ const redoMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text
 }
 
 const omitRestoreOperation = async (ctx: PrismaChatContext, activate: boolean) => {
+  const chatId = await findChat(ctx)
   const transactions = await ctx.prisma.record.findMany({
     select: {
       id: true
     },
     where: {
-      chatId: ctx.chat?.id,
+      chatId,
       active: !activate,
     }
   })

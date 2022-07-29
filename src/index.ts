@@ -5,9 +5,9 @@ import NodeCache from 'node-cache'
 
 import config from './config'
 import botPlugin from './botPlugin'
-//to env
+
 const fastify = Fastify({
-  logger: true
+  logger: !config.PRODUCTION
 })
 
 const start = async () => {

@@ -90,6 +90,25 @@ export const findChat = async (ctx: PrismaChatContext) => {
   return chat.groupChatId ? chat.groupChatId : chat.id
 }
 
+export const findPrivateChat = async (ctx: PrismaChatContext) => {
+  if (!ctx.chat) throw 'Нет данных о чате' 
+  const chat = await ctx.prisma.chat.findUnique({
+    select: {
+      privateChat: {
+        select: {
+          id: true
+        }
+      },
+      id: true,
+    },
+    where: {
+      id: ctx.chat.id
+    }
+  })
+  if (!chat) return ctx.chat.id
+  return chat.privateChat ? chat.privateChat.id : chat.id
+}
+
 export const listMembers = async (ctx: PrismaChatContext, active?: boolean): Promise<MemberWithLink[]> => {
   if (!ctx.chat) return []
 

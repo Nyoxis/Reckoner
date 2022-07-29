@@ -1,9 +1,9 @@
 import { Markup } from 'telegraf'
 
 import { escapeChars } from '../constants'
-import { listMembers, updateKeyboard } from '../constants/functions'
+import { findPrivateChat, listMembers, updateKeyboard } from '../constants/functions'
 import { getBill, getDonorsDebtors } from '../constants/billFunctions'
-import { listBillKeyboard, billTypeUpdate } from '../constants/billUpdateFunctions'
+import { listBillKeyboard, billTypeUpdate, personalDebtText } from '../constants/billUpdateFunctions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { MemberWithLink } from '../constants/types'
@@ -11,15 +11,23 @@ import type { InlineKeyboardButton, InlineKeyboardMarkup } from 'telegraf/typing
 
 const billMIddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['text']>> = async (ctx) => {
   const { text, markup } = await listBillKeyboard(ctx, true)
-  const replyMessage = await ctx.reply(text, {
-    reply_to_message_id: ctx.message.message_id,
+  const privateChat = await findPrivateChat(ctx)
+  
+  let extra: Types.ExtraReplyMessage = {
     reply_markup: markup.reply_markup,
-    parse_mode: 'MarkdownV2'
-  })
+    parse_mode: 'MarkdownV2',
+  }
+  if (ctx.chat.id === Number(privateChat)) extra = {... extra, reply_to_message_id: ctx.message.message_id}
+  
+  const replyMessage = await ctx.telegram.sendMessage(
+    Number(privateChat),
+    text,
+    extra,
+  )
   await billTypeUpdate(ctx, 'bl', undefined, replyMessage.message_id)
 }
 
-const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callback_query']>> = async (ctx, next) => {
+const billActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callback_query']>> = async (ctx, next) => {
   if(!ctx.callbackQuery.message) return next()
   const message = ctx.callbackQuery.message
   if (!ctx.callbackQuery.data) return
@@ -47,32 +55,8 @@ const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['call
         [Markup.button.callback('/give - одалживание или возврат долга', ['ad', opDonor, '/give'].join(';'))],
         [Markup.button.switchToCurrentChat('/pay - оплата счета, внос депозита', [opDonorLink, '/pay'].join(' ') + ' ')],
       ]
-
-      const { principalDebt, principalPart, donorsDebtors } = await getDonorsDebtors(ctx, opDonorMember)
-      text = `Дебет/долг участника *${opDonorLink}*: *${escapeChars(principalDebt.toString())}*\n`
-      if (principalPart !== principalDebt) {
-        text += `Дебет/долг без учета замороженных: *${escapeChars(principalPart.toString())}*\n`
-      }
       
-      const donorsDebtorsRecords = donorsDebtors.map(donorDebtor => {
-        let record = `  *${donorDebtor.active ? '' : '❆'}${donorDebtor.linkName()}*` +
-                     ` *${escapeChars(donorDebtor.debit.toString())}*`
-        if (donorDebtor.debit !== donorDebtor.debitUnfrozen) {
-          record += ` *${escapeChars(donorDebtor.debitUnfrozen.toString())}*`
-        }
-        return record
-      })
-      
-      const debts = donorsDebtorsRecords.filter((record, index) => donorsDebtors[index].debit > 0)
-      if (debts.length) {
-        text += 'Должен следующим участникам:\n'
-        text += debts.join('\n') + '\n'
-      }
-      const debits = donorsDebtorsRecords.filter((record, index) => donorsDebtors[index].debit < 0)
-      if (debits.length) {
-        text += 'Должны следующие участники:\n'
-        text += debits.join('\n') + '\n'
-      }
+      text = await personalDebtText(ctx, opDonorMember)
       
       text += `\nВыберите команду от лица *${opDonorLink}*`
       markup = Markup.inlineKeyboard(opButtons)
@@ -146,5 +130,5 @@ const composeCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['call
   updateKeyboard(ctx, text, markup)
 }
 
-export { getBill, composeCommand }
+export { getBill, billActions }
 export default billMIddleware
