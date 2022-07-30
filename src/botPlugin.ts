@@ -153,13 +153,12 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
     await fastify.prisma.chat.deleteMany({ where: { id: ctx.chat.id } })
     ctx.cache.del(ctx.chat.id)
   })
-  /*
   const SECRET_PATH = `/telegraf/${bot.secretPathComponent()}`
   fastify.post(SECRET_PATH, (request: FastifyRequest<{ Body: Update }>, reply) => bot.handleUpdate(request.body, reply.raw))
   bot.telegram.setWebhook(config.WEBHOOK_URL + SECRET_PATH)
     .then(() => {
       console.log('Webhook is set on', config.WEBHOOK_URL)
-    })*/
+    })
   bot.on('edited_message', updateMiddleware)
   bot.launch()
   // Enable graceful stop

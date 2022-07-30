@@ -8,7 +8,7 @@ dotenv.config()
 // as someone could skip these varibales or not setup a .env file at all
 
 interface ENV {
-  PRODUCTION: boolean | undefined
+  NODE_ENV: boolean
   PORT: number | undefined
   BOT_NAME: string | undefined
   BOT_TOKEN: string | undefined
@@ -25,7 +25,7 @@ type Config = NonNullableKey<ENV>
 
 const getConfig = (): ENV => {
   return {
-    PRODUCTION: process.env.PRODUCTION ? String(process.env.PRODUCTION) === 'true' : false,
+    NODE_ENV: process.env.NODE_ENV ? String(process.env.NODE_ENV) === 'production' : false,
     PORT: process.env.PORT ? Number(process.env.PORT) : undefined,
     BOT_NAME: process.env.BOT_NAME ? String(process.env.BOT_NAME) : undefined,
     BOT_TOKEN: process.env.BOT_TOKEN ? String(process.env.BOT_TOKEN) : undefined,

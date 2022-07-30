@@ -7,7 +7,7 @@ import config from './config'
 import botPlugin from './botPlugin'
 
 const fastify = Fastify({
-  logger: !config.PRODUCTION
+  logger: !config.NODE_ENV
 })
 
 const start = async () => {

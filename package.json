@@ -5,6 +5,8 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
+    "build": "tsc",
+    "start": "set NODE_ENV=production&&node --experimental-specifier-resolution=node dist/index",
     "dev": "nodemon --exec node --experimental-specifier-resolution=node --loader ts-node/esm src/index.ts"
   },
   "repository": {
