@@ -9,7 +9,7 @@ import {
   resolveQuery,
   findChat,
 } from '../constants/functions'
-import { numericSymbolicFilter } from '../constants'
+import { hasCommands, numericSymbolicFilter } from '../constants'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from 'telegraf'
 import type { Member, Record } from '@prisma/client'
@@ -119,12 +119,14 @@ const transactionCommand = async (
   isSubjective: boolean = true,
 ) => {
   let parameters: string[]
-  if (ctx.message.text.startsWith('/')) {
+  const text = ctx.message.text
+  if (hasCommands.test(text.split(' ')[0])) {
     parameters = [''].concat(ctx.message.text.split(' ').slice(1))
   } else {
     parameters = ctx.message.text.split(' ').splice(0, 1).concat(ctx.message.text.split(' ').slice(2))
+    if (text.startsWith('/')) parameters[0] = parameters[0].slice(1)
   }
-
+  
   /*if (!parameters.length) {
     ctx.reply('a list of users', { reply_to_message_id: ctx.message.message_id })
   }*/

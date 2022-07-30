@@ -121,8 +121,11 @@ const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['ed
     telegram: update.telegram,
   }
   
-  const text = update.editedMessage.text
-  const command = text.split(' ')[0]
+  const text = ctx.message.text
+  const words = text.split(' ')
+  if (!(words.length > 1 && words[1].startsWith('/'))) return next()
+  
+  const command = words[1]
   switch (command) {
     case '/buy':
       editedErrorHandling(

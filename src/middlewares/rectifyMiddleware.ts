@@ -1,4 +1,4 @@
-import { numericSymbolicFilter, escapeChars } from '../constants'
+import { numericSymbolicFilter, escapeChars, hasCommands } from '../constants'
 import { evaluate } from '../constants/functions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from "telegraf"
@@ -6,8 +6,7 @@ import type { InlineQueryResultArticle } from 'telegraf/typings/core/types/typeg
 
 const rectifyCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['inline_query']>> = (ctx, next) => {
   const query = ctx.inlineQuery.query
-
-  const hasCommands = /(?:.*((\/rename)|(\/include)|(\/pay)|(\/order)|(\/buy)|(\/give))+.*)/
+  
   if (!hasCommands.test(query)) return
   
   const parameters = query.split(' ')
@@ -15,7 +14,6 @@ const rectifyCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['inli
   numeric = parameters.find(parameter => numericSymbolicFilter.test(parameter))
   if (!numeric) return ctx.answerInlineQuery([])
   
-  const text = escapeChars(query)
   let sum: number
   try {
     sum = Math.trunc(evaluate(numeric) * 100)/100
@@ -24,7 +22,7 @@ const rectifyCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['inli
       return ctx.answerInlineQuery([])
     } else throw err
   }
-  
+  const text = query.replace(numeric, escapeChars(sum.toString()))
   const result: InlineQueryResultArticle = {
     type: 'article',
     id: sum.toString(),

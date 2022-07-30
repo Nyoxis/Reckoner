@@ -130,7 +130,7 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
     const text = ctx.message.text
     const words = text.split(' ')
     if (!(words.length > 1 && words[1].startsWith('/'))) return next()
-
+    
     const command = words[1]
     switch(command) {
       case '/pay':

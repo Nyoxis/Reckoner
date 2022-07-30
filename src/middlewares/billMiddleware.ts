@@ -53,7 +53,7 @@ const billActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callbac
         [Markup.button.callback('назад', 'bl')],
         [Markup.button.callback('/buy - совместная покупка на компанию', ['ad', opDonor, '/buy'].join(';'))],
         [Markup.button.callback('/give - одалживание или возврат долга', ['ad', opDonor, '/give'].join(';'))],
-        [Markup.button.switchToCurrentChat('/pay - оплата счета, внос депозита', [opDonorLink, '/pay'].join(' ') + ' ')],
+        [Markup.button.switchToCurrentChat('/pay - оплата счета, внос депозита', [opDonorMember?.linkNameUnescaped(), '/pay'].join(' ') + ' ')],
       ]
       
       text = await personalDebtText(ctx, opDonorMember)
@@ -99,9 +99,9 @@ const billActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callbac
         adButtons.push([Markup.button.switchToCurrentChat(
           text,
           [
-            adDonorLink,
+            adDonorMember?.linkNameUnescaped(),
             operation,
-            ...addresseeMembers.map(member => member.linkName())
+            ...addresseeMembers.map(member => member.linkNameUnescaped())
           ].join(' ') + ' ',
         )])
       }

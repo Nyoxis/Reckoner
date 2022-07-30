@@ -15,3 +15,5 @@ export const alphabeticalFilter = /^[0-9a-zA-Zа-яА-Я_.]{3,}$/
 export const escapeChars = (text: string) => {
   return text.replace(/([+=()\-*\/_.])/g, match => '\\' + match)
 }
+
+export const hasCommands = /(?:.*((\/rename)|(\/include)|(\/pay)|(\/order)|(\/buy)|(\/give))+.*)/

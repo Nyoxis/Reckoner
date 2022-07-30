@@ -27,6 +27,10 @@ export class MemberWithLink implements MemberWithUsername {
     const userLink = `[${this.name}](tg://user?id=${this.account})`
     return `${this.username ? '@' + escapeChars(this.username) : this.getKind() === 'USER' ? userLink : escapeChars(this.account)}`
   }
+  linkNameUnescaped = ():string => {
+    const userLink = `[${this.name}](tg://user?id=${this.account})`
+    return `${this.username ? '@' + this.username : this.getKind() === 'USER' ? userLink : this.account}`
+  }
 }
 
 export type MemberWithSum = MemberWithLink & {
