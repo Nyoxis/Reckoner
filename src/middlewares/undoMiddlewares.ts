@@ -114,7 +114,7 @@ const omitRestoreOperation = async (ctx: PrismaChatContext, activate: boolean) =
   })
   const donePromise = transactions.map((transaction, index) => {
     return new Promise(resolve => {
-      setTimeout(() => resolve(activateInactivateFunction(ctx, transaction.id, activate)), index*1000);
+      setTimeout(() => resolve(activateInactivateFunction(ctx, transaction.id, activate)), index*4000);
     })
   })
   const done = await Promise.all(donePromise)
