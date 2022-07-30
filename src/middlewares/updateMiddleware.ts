@@ -166,9 +166,9 @@ const updateMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['ed
         },
         data: { active: false },
       })
-      if (reply_text !== update.editedMessage.text) {
-        update.telegram.editMessageText(update.chat.id, Number(record.replyId), undefined, reply_text)
-      }
+      editErrorHandling(async () => {
+        await update.telegram.editMessageText(update.chat.id, Number(record.replyId), undefined, reply_text)
+      })
   }
 }
 
