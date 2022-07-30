@@ -16,4 +16,8 @@ export const escapeChars = (text: string) => {
   return text.replace(/([+=()\-*\/_.])/g, match => '\\' + match)
 }
 
+export const escapeCharsExceptLink = (text: string) => {
+  return text.replace(/([+=\-*\/_.])/g, match => '\\' + match)
+}
+
 export const hasCommands = /(?:.*((\/rename)|(\/include)|(\/pay)|(\/order)|(\/buy)|(\/give))+.*)/

@@ -1,4 +1,4 @@
-import { numericSymbolicFilter, escapeChars, hasCommands } from '../constants'
+import { numericSymbolicFilter, escapeChars, hasCommands, escapeCharsExceptLink } from '../constants'
 import { evaluate } from '../constants/functions'
 
 import type { MiddlewareFn, NarrowedContext, Context, Types } from "telegraf"
@@ -22,7 +22,7 @@ const rectifyCommand: MiddlewareFn<NarrowedContext<Context, Types.MountMap['inli
       return ctx.answerInlineQuery([])
     } else throw err
   }
-  const text = query.replace(numeric, escapeChars(sum.toString()))
+  const text = escapeCharsExceptLink(query.replace(numeric, sum.toString()))
   const result: InlineQueryResultArticle = {
     type: 'article',
     id: sum.toString(),
