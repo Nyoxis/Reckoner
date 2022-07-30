@@ -39,7 +39,8 @@ const startMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
             `Команды здесь будут отражены на участниках группы\n` +
             `Чтобы использовать бота в частном режиме используйте команду /start\n\n` +
             `Удерживайте /include и введите участников через пробел\n` +
-            `Используйте /bill чтобы показать список дебета, долга`,
+            `Используйте /bill чтобы показать список дебета, долга в чате\n` +
+            `Используйте /count чтобы отобразить список дебета, долга в группе`,
             { reply_markup: markup.reply_markup },
           ).catch((err: TelegramError) => {
             if (err.response.error_code === 403) {

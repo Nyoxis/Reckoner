@@ -117,7 +117,7 @@ const billActions: MiddlewareFn<NarrowedContext<Context, Types.MountMap['callbac
           break
         default:
           text = `*${adDonorLink} ${operation}* ` +
-                  `*${addresseeMembers.map(member => member.linkName()).join(', ')}*` +
+                  `*${addresseeMembers.map(member => member.linkName()).join(' ')}*` +
                   `\nДобавьте адресанта или нажмите продолжить`
           break
       }

@@ -6,24 +6,19 @@ const checkMiddleware: MiddlewareFn<NarrowedContext<Context, Types.MountMap['tex
   await sneakyAddId(ctx, ctx.message.from)
   
   const text = ctx.message.text
-  const words = text.split(' ')
-  if (!(text.startsWith('/')) && !(words.length > 1 && words[1].startsWith('/'))) return
   
   const chat = await ctx.prisma.chat.findUnique({
     where: { id: ctx.chat.id }
   })
   
-  if (!chat) {
-    if (ctx.message.text.startsWith('/start')) return next()
-    return ctx.reply('Чтобы начать напишите /start')
-  } else {
-    if (chat.config === 'PROTECTED') {
-      const admins = await ctx.getChatAdministrators()
-      
-      if (!admins.find(admin => admin.user.id === ctx.message.from.id)) {
-        return ctx.reply('Только администраторы могут использовать этот бот')
-      }
+  if (chat && chat.config === 'PROTECTED' || (!chat && ctx.chat.type !== 'private')) {
+    const admins = await ctx.getChatAdministrators()
+    
+    if (!admins.some(admin => admin.user.id === ctx.message.from.id)) {
+      return ctx.reply('Только администраторы могут использовать этот бот', { reply_to_message_id: ctx.message.message_id })
     }
+  } else {
+    if (!chat && !text.startsWith('/start')) return ctx.reply('Чтобы начать напишите /start', { reply_to_message_id: ctx.message.message_id })
   }
   
   next()
