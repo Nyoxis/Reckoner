@@ -123,8 +123,8 @@ const transactionCommand = async (
   if (hasCommands.test(text.split(' ')[0])) {
     parameters = [''].concat(ctx.message.text.split(' ').slice(1))
   } else {
-    parameters = ctx.message.text.split(' ').splice(0, 1).concat(ctx.message.text.split(' ').slice(2))
-    if (text.startsWith('/')) parameters[0] = parameters[0].slice(1)
+    if (text.startsWith('/ ')) parameters = ctx.message.text.split(' ').slice(1, 2).concat(ctx.message.text.split(' ').slice(3))
+      else parameters = ctx.message.text.split(' ').slice(0, 1).concat(ctx.message.text.split(' ').slice(2))
   }
   
   /*if (!parameters.length) {

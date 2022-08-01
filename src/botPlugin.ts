@@ -53,6 +53,7 @@ import type { PrismaClient } from '@prisma/client'
 import type { ComputeKind } from './constants/accountKind'
 import type { Update } from 'telegraf/typings/core/types/typegram'
 import type NodeCache from 'node-cache'
+import { hasCommands } from './constants'
 
 declare module 'telegraf' {
   interface Context {
@@ -127,9 +128,10 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   bot.command('restore', restoreMiddleware)
   
   bot.on('text', (ctx, next) => {
-    const text = ctx.message.text
+    let text = ctx.message.text
     const words = text.split(' ')
-    if (!(words.length > 1 && words[1].startsWith('/'))) return next()
+    if (text.startsWith('/ ')) text = text.slice(2)
+    if (!(words.length > 1 && hasCommands.test(words[1]))) return next()
     
     const command = words[1]
     switch(command) {
