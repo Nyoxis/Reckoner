@@ -119,12 +119,12 @@ const transactionCommand = async (
   isSubjective: boolean = true,
 ) => {
   let parameters: string[]
-  const text = ctx.message.text
+  let text = ctx.message.text
   if (hasCommands.test(text.split(' ')[0])) {
-    parameters = [''].concat(ctx.message.text.split(' ').slice(1))
+    parameters = [''].concat(text.split(' ').slice(1))
   } else {
-    if (text.startsWith('/ ')) parameters = ctx.message.text.split(' ').slice(1, 2).concat(ctx.message.text.split(' ').slice(3))
-      else parameters = ctx.message.text.split(' ').slice(0, 1).concat(ctx.message.text.split(' ').slice(2))
+    if (text.startsWith('/ ')) text = text.slice(2)
+    parameters = text.split(' ').slice(0, 1).concat(text.split(' ').slice(2))
   }
   
   /*if (!parameters.length) {
