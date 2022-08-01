@@ -129,8 +129,8 @@ const botPlugin: FastifyPluginAsync = async (fastify) => {
   
   bot.on('text', (ctx, next) => {
     let text = ctx.message.text
-    const words = text.split(' ')
     if (text.startsWith('/ ')) text = text.slice(2)
+    const words = text.split(' ')
     if (!(words.length > 1 && hasCommands.test(words[1]))) return next()
     
     const command = words[1]
